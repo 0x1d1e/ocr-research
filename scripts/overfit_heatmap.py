@@ -30,6 +30,7 @@ def build_model(config: dict, vocabulary: Vocabulary | None = None) -> PrismOCRM
         max_table_cols=config["max_table_cols"],
         max_cell_span=config["max_cell_span"],
         strip_buckets=config["strip_buckets"],
+        fused_text_head=config.get("fused_text_head", False),
     )
 
 

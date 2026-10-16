@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import torch
+from PIL import Image
 
 from prismocr.api import InferenceError, InferenceOptions, PrismOCR, save_artifact
 from prismocr.data.vocabulary import Vocabulary
@@ -778,6 +779,27 @@ class PublicInferenceIntegrationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "grid_scores_calibrated must be a boolean"):
             PrismOCR(model, vocabulary, calibration={"grid_scores_calibrated": "false"})
+
+    def test_exif_orientation_tag_6_transposes_to_displayed_frame(self) -> None:
+        vocabulary = Vocabulary.from_texts(["a"], max_size=8)
+        model = make_model(vocabulary, text_proposals=1, region_queries=1)
+        api = PrismOCR(model, vocabulary)
+
+        # Raw size: width=30, height=40.
+        # Orientation 6 specifies a 90-degree CCW rotation, so displayed frame has width=40, height=30.
+        raw = Image.new("RGB", (30, 40), (255, 255, 255))
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        raw._getexif = lambda: dict(exif)  # in-memory EXIF attachment
+        raw.getexif = lambda: exif
+
+        tensor, width, height = PrismOCR._tensor_image(raw)
+        self.assertEqual((width, height), (40, 30))
+        self.assertEqual(tuple(tensor.shape), (3, 30, 40))
+
+        result = api.predict(raw, InferenceOptions(return_debug=True)).to_dict()
+        self.assertEqual((result["image"]["width"], result["image"]["height"]), (40, 30))
+
 
 
 if __name__ == "__main__":

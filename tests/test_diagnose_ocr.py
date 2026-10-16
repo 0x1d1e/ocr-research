@@ -13,7 +13,17 @@ import torch
 from PIL import Image
 
 from prismocr.geometry import rotated_iou
-from scripts.diagnose_ocr import aggregate_public, aggregate_recognition, box_quality, decode_stats, public_probe, select_manifest
+from prismocr.model.network import PrismOCRModel
+from scripts.diagnose_ocr import (
+    aggregate_public,
+    aggregate_recognition,
+    box_quality,
+    canvas_probe,
+    decode_stats,
+    direct_probe,
+    public_probe,
+    select_manifest,
+)
 from prismocr.data.vocabulary import Vocabulary
 
 
@@ -112,6 +122,42 @@ class DiagnosisTests(unittest.TestCase):
         self.assertEqual(result["text"], "aa")
         self.assertAlmostEqual(result["frame_blank_posterior_mean"], 0.25)
         self.assertAlmostEqual(result["frame_blank_top1_fraction"], 0.25)
+
+    def test_direct_and_canvas_probe_support_both_fused_and_unfused_text_head(self):
+        vocabulary = Vocabulary.from_texts(["a"])
+        for fused in (False, True):
+            with self.subTest(fused=fused):
+                model = PrismOCRModel(
+                    dim=10,
+                    text_proposals=4,
+                    region_queries=2,
+                    vocab_size=len(vocabulary),
+                    vocabulary=vocabulary,
+                    fused_text_head=fused,
+                ).eval()
+                engine = SimpleNamespace(model=model, device="cpu", vocabulary=vocabulary)
+                img = torch.zeros((3, 1104, 256), dtype=torch.float32)
+                target = {
+                    "_original_size": (256, 1104),
+                    "page_id": "doc:1",
+                    "lines": [
+                        {
+                            "id": "line-1",
+                            "box": [100.0 / 256.0, 256.0 / 1104.0, 40.0 / 256.0, 20.0 / 1104.0, 0.0, 1.0],
+                            "text": "a",
+                            "role": "LINE",
+                        }
+                    ],
+                    "regions": [],
+                    "cells": [],
+                    "relations": [],
+                }
+                dataset = [(img, target)]
+                d_result, gt_rows = direct_probe(engine, dataset, 0, oracle_cap=1, heatmap_probe=True)
+                self.assertIn("ground_truth_lines", d_result)
+                self.assertEqual(len(gt_rows), 1)
+                c_result = canvas_probe(engine, dataset, 0)
+                self.assertEqual(c_result["status"], "completed")
 
 
 if __name__ == "__main__":

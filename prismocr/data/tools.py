@@ -318,19 +318,31 @@ def _group_records(
     first_for_key: dict[tuple[str, str], int] = {}
     first_for_digest: dict[str, int] = {}
     for index, record in enumerate(dataset.records):
-        annotation = record["_annotation"]
-        provenance = annotation["provenance"]
-        document = annotation["document_id"]
+        annotation = record.get("_annotation") or record.get("annotation") or {}
+        provenance = annotation.get("provenance", {})
+        document = annotation.get("document_id")
         family = provenance.get("template_family_id")
-        keys = [("document", document)]
+        keys: list[tuple[str, str]] = []
+        if document:
+            keys.append(("document", document))
         if family:
             keys.append(("family", family))
         for key in keys:
             previous = first_for_key.setdefault(key, index)
             union(index, previous)
-        digest = record["_image_sha256"]
-        previous_image = first_for_digest.setdefault(digest, index)
-        union(index, previous_image)
+        digest = record.get("_image_sha256") or annotation.get("image", {}).get("sha256")
+        if digest:
+            previous_image = first_for_digest.setdefault(digest, index)
+            union(index, previous_image)
+        for line in annotation.get("lines", []):
+            crop_id = line.get("source_crop_id")
+            if crop_id:
+                previous_crop_id = first_for_key.setdefault(("crop_id", str(crop_id)), index)
+                union(index, previous_crop_id)
+            crop_hash = line.get("source_crop_hash")
+            if crop_hash:
+                previous_crop_hash = first_for_key.setdefault(("crop_hash", str(crop_hash)), index)
+                union(index, previous_crop_hash)
 
     if near_duplicate_hamming is not None:
         indices_by_dhash: dict[str, list[int]] = defaultdict(list)
@@ -379,33 +391,140 @@ def _split_membership(
         name: {"document_sha256": set(), "image_sha256": set(), "group_sha256": set()}
         for name in _SPLIT_NAMES
     }
+    source_crop_ids: dict[str, set[str]] = {name: set() for name in _SPLIT_NAMES}
+    source_crop_hashes: dict[str, set[str]] = {name: set() for name in _SPLIT_NAMES}
+    source_crop_sha256: dict[str, set[str]] = {name: set() for name in _SPLIT_NAMES}
+
     for name in _SPLIT_NAMES:
         for record in records_by_split[name]:
+            annotation = record.get("_annotation") or record.get("annotation") or {}
+            doc_id = annotation.get("document_id", "")
             membership[name]["document_sha256"].add(
-                hashlib.sha256(record["_annotation"]["document_id"].encode("utf-8")).hexdigest()
+                hashlib.sha256(doc_id.encode("utf-8")).hexdigest()
             )
-            membership[name]["image_sha256"].add(record["_image_sha256"])
+            img_digest = record.get("_image_sha256") or annotation.get("image", {}).get("sha256")
+            if img_digest:
+                membership[name]["image_sha256"].add(img_digest)
+            for line in annotation.get("lines", []):
+                crop_id = line.get("source_crop_id")
+                crop_hash = line.get("source_crop_hash")
+                if crop_id:
+                    source_crop_ids[name].add(str(crop_id))
+                if crop_hash:
+                    source_crop_hashes[name].add(str(crop_hash))
+                if crop_hash:
+                    source_crop_sha256[name].add(str(crop_hash))
+                elif crop_id:
+                    source_crop_sha256[name].add(
+                        hashlib.sha256(str(crop_id).encode("utf-8")).hexdigest()
+                    )
+
+    # Verify that no source crop spans more than one split
+    for i, name_a in enumerate(_SPLIT_NAMES):
+        for name_b in _SPLIT_NAMES[i + 1 :]:
+            if (
+                (source_crop_ids[name_a] & source_crop_ids[name_b])
+                or (source_crop_hashes[name_a] & source_crop_hashes[name_b])
+                or (source_crop_sha256[name_a] & source_crop_sha256[name_b])
+            ):
+                raise ValueError("a source crop spans more than one split")
+
     for group in groups:
         owners = {owner[item] for item in group}
         if len(owners) != 1:
             raise ValueError("a document, template family, or near-duplicate group spans more than one split")
         name = next(iter(owners))
+        digests = [
+            records[item].get("_image_sha256")
+            or (records[item].get("annotation") or records[item].get("_annotation", {})).get("image", {}).get("sha256", "")
+            for item in group
+        ]
         membership[name]["group_sha256"].add(
-            hashlib.sha256(
-                "\n".join(sorted(records[item]["_image_sha256"] for item in group)).encode("utf-8")
-            ).hexdigest()
+            hashlib.sha256("\n".join(sorted(digests)).encode("utf-8")).hexdigest()
         )
     return {
         "page_counts": {name: len(records_by_split[name]) for name in _SPLIT_NAMES},
+        "source_crop_counts": {name: len(source_crop_sha256[name]) for name in _SPLIT_NAMES},
         "independent_group_count": len(groups),
         "split_fingerprints": {
             name: {
                 "document_sha256": sorted(membership[name]["document_sha256"]),
                 "image_sha256": sorted(membership[name]["image_sha256"]),
                 "group_sha256": sorted(membership[name]["group_sha256"]),
+                "source_crop_sha256": sorted(source_crop_sha256[name]),
             }
             for name in _SPLIT_NAMES
         },
+    }
+
+
+def _char_3grams(text: str) -> set[str]:
+    text = text.strip()
+    if not text:
+        return set()
+    if len(text) < 3:
+        return {text}
+    return {text[i : i + 3] for i in range(len(text) - 2)}
+
+
+def _compare_transcripts(transcripts_a: Sequence[str], transcripts_b: Sequence[str]) -> dict[str, Any]:
+    exact_set_a = set(transcripts_a)
+    exact_set_b = set(transcripts_b)
+    shared_transcripts = exact_set_a & exact_set_b
+    union_transcripts = exact_set_a | exact_set_b
+    exact_jaccard = (
+        round(len(shared_transcripts) / len(union_transcripts), 6)
+        if union_transcripts
+        else 0.0
+    )
+
+    ngrams_a: set[str] = set()
+    for text in exact_set_a:
+        ngrams_a.update(_char_3grams(text))
+    ngrams_b: set[str] = set()
+    for text in exact_set_b:
+        ngrams_b.update(_char_3grams(text))
+
+    shared_ngrams = ngrams_a & ngrams_b
+    union_ngrams = ngrams_a | ngrams_b
+    ngram_jaccard = (
+        round(len(shared_ngrams) / len(union_ngrams), 6)
+        if union_ngrams
+        else 0.0
+    )
+
+    return {
+        "exact_shared_count": len(shared_transcripts),
+        "exact_shared": len(shared_transcripts),
+        "exact_jaccard": exact_jaccard,
+        "ngram_shared_count": len(shared_ngrams),
+        "ngram_shared": len(shared_ngrams),
+        "ngram_jaccard": ngram_jaccard,
+        "char_3gram_jaccard": ngram_jaccard,
+    }
+
+
+def _split_transcript_overlap(records_by_split: Mapping[str, Sequence[dict[str, Any]]]) -> dict[str, Any]:
+    def extract_texts(records: Sequence[dict[str, Any]]) -> list[str]:
+        texts: list[str] = []
+        for record in records:
+            annotation = record.get("_annotation") or record.get("annotation") or {}
+            for line in annotation.get("lines", []):
+                text = line.get("text")
+                if isinstance(text, str) and text.strip():
+                    texts.append(text.strip())
+        return texts
+
+    transcripts = {name: extract_texts(records_by_split.get(name, [])) for name in _SPLIT_NAMES}
+    train_val = _compare_transcripts(transcripts["train"], transcripts["validation"])
+    train_test = _compare_transcripts(transcripts["train"], transcripts["test"])
+    val_test = _compare_transcripts(transcripts["validation"], transcripts["test"])
+    return {
+        "train_vs_val": train_val,
+        "train_vs_validation": train_val,
+        "train_vs_test": train_test,
+        "val_vs_test": val_test,
+        "validation_vs_test": val_test,
     }
 
 
@@ -440,9 +559,9 @@ def write_split_report(
     empty = sorted(name for name, dataset in datasets.items() if not len(dataset))
     if empty:
         raise ValueError(f"frozen split manifest is empty: {', '.join(empty)}")
-    membership = _split_membership(
-        {name: dataset.records for name, dataset in datasets.items()}, near_duplicate_hamming
-    )
+    records_by_split = {name: dataset.records for name, dataset in datasets.items()}
+    membership = _split_membership(records_by_split, near_duplicate_hamming)
+    transcript_overlap = _split_transcript_overlap(records_by_split)
     total_pages = sum(membership["page_counts"].values())
     result: dict[str, Any] = {
         "schema_version": "4.0",
@@ -452,6 +571,7 @@ def write_split_report(
             name: membership["page_counts"][name] / total_pages for name in _SPLIT_NAMES
         },
         **membership,
+        "transcript_overlap": transcript_overlap,
         "manifests": {name: str(paths[name]) for name in _SPLIT_NAMES},
         "manifest_sha256": {name: _sha256_file(paths[name]) for name in _SPLIT_NAMES},
         "status": _GROUPED_SPLIT_STATUS,
@@ -529,6 +649,7 @@ def build_document_splits(
         "near_duplicate_hamming": near_duplicate_hamming,
         "ratios": dict(zip(names, ratios, strict=True)),
         **_split_membership(records_by_split, near_duplicate_hamming),
+        "transcript_overlap": _split_transcript_overlap(records_by_split),
         "manifests": split_paths,
         "manifest_sha256": {
             name: _sha256_file(Path(path)) for name, path in split_paths.items()

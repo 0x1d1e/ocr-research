@@ -13,6 +13,7 @@ from torch.nn import functional as F
 from prismocr.data.schema import resolve_line_supervision
 from prismocr.data.vocabulary import Vocabulary
 from prismocr.graph_decode import GraphNode, relation_candidate_error
+from prismocr.model.heads import TextLineHead
 from prismocr.model.network import (
     RELATION_NAMES,
     _kind_id,
@@ -304,17 +305,16 @@ class PrismOCRLoss(nn.Module):
             outputs["text_heatmap_logits"], heatmap_target, heatmap_anchors,
             heatmap_valid, heatmap_negative,
         )
-        role_loss = zero
+        role_terms: list[torch.Tensor] = []
         region_loss = zero
         box_loss = zero
-        graph_loss = zero
+        graph_terms: list[torch.Tensor] = []
         grid_terms: list[torch.Tensor] = []
         text_box_terms: list[torch.Tensor] = []
         region_box_terms: list[torch.Tensor] = []
         accepted_gt_for_proposal: list[dict[int, int]] = []
         grid_exclusions: list[dict[str, Any]] = []
         line_items_by_batch: list[list[Mapping[str, Any]]] = []
-        oov_count = 0
         rejected_ctc: list[dict[str, Any]] = []
         unsupported_ctc = tuple(outputs.get("ocr_unsupported", ()))
         unmatched_gt = 0
@@ -344,16 +344,45 @@ class PrismOCRLoss(nn.Module):
             text_assigned_count += len(text_match.assigned_gt_idx)
             text_accepted_count += len(text_match.accepted_gt_idx)
 
-            for gt_index, proposal_index in text_match.assignment_pairs:
-                item = line_items[gt_index]
-                role = _role_id(item["role"])
-                role_loss = role_loss + F.cross_entropy(
-                    outputs["text"]["role_logits"][batch_index, proposal_index].float()[None],
-                    torch.tensor([role], device=device),
-                )
-                truth = _target_box(item, device, dtype)[None]
-                prediction = outputs["text"]["boxes"][batch_index, proposal_index][None]
-                text_box_terms.append(self._box_loss(prediction, truth))
+            raw_text = outputs.get("raw_text")
+            if raw_text is not None and line_states[batch_index] != "unavailable":
+                H_grid, W_grid = raw_text["box_map"].shape[-2:]
+                for item in line_items:
+                    role = _role_id(item["role"])
+                    truth = _target_box(item, device, dtype)
+                    grid_x = min(W_grid - 1, max(0, int(float(truth[0]) * W_grid)))
+                    grid_y = min(H_grid - 1, max(0, int(float(truth[1]) * H_grid)))
+                    role_logits = raw_text["role_map"][batch_index, :, grid_y, grid_x]
+                    role_terms.append(F.cross_entropy(
+                        role_logits.float()[None],
+                        torch.tensor([role], device=device),
+                    ))
+                    raw_box = raw_text["box_map"][batch_index, :, grid_y, grid_x]
+                    cx = (torch.tensor(grid_x, device=device, dtype=raw_box.dtype) + raw_box[0].sigmoid()) / max(W_grid, 1)
+                    cy = (torch.tensor(grid_y, device=device, dtype=raw_box.dtype) + raw_box[1].sigmoid()) / max(H_grid, 1)
+                    sizes = TextLineHead.decode_sizes(
+                        raw_box[2:4].unsqueeze(0),
+                        model_contract_version=outputs.get("model_contract_version", 1),
+                        image_size=outputs.get("image_size"),
+                    )[0]
+                    ori = raw_box[4:6].unsqueeze(0)
+                    norm = torch.linalg.vector_norm(ori, dim=-1, keepdim=True)
+                    fallback = torch.zeros_like(ori)
+                    fallback[..., 1] = 1.0
+                    ori = torch.where(norm > 1e-6, ori / norm.clamp_min(1e-6), fallback)[0]
+                    pred_box = torch.cat([cx.view(1), cy.view(1), sizes, ori], dim=-1)[None]
+                    text_box_terms.append(self._box_loss(pred_box, truth[None]))
+            else:
+                for gt_index, proposal_index in text_match.assignment_pairs:
+                    item = line_items[gt_index]
+                    role = _role_id(item["role"])
+                    role_terms.append(F.cross_entropy(
+                        outputs["text"]["role_logits"][batch_index, proposal_index].float()[None],
+                        torch.tensor([role], device=device),
+                    ))
+                    truth = _target_box(item, device, dtype)[None]
+                    prediction = outputs["text"]["boxes"][batch_index, proposal_index][None]
+                    text_box_terms.append(self._box_loss(prediction, truth))
 
             region_logits = outputs["regions"]["class_logits"][batch_index]
             region_targets = torch.zeros(region_logits.shape[0], device=device, dtype=torch.long)
@@ -525,16 +554,19 @@ class PrismOCRLoss(nn.Module):
                         valid_targets[candidate_index] = True
                 relation_logits = outputs["graph_logits"][batch_index, rel_index, source_index].float()
                 relation_logits = relation_logits.masked_fill(~valid_targets, float("-inf"))
-                graph_loss = graph_loss + F.cross_entropy(
+                graph_terms.append(F.cross_entropy(
                     relation_logits[None],
                     torch.tensor([target_index], device=device),
-                )
+                ))
 
         def record_ctc_rejection(batch_index: int, proposal_index: int, reason: str, gt_index: int | None = None) -> None:
             target = targets[batch_index]
             line_items = line_items_by_batch[batch_index]
             if gt_index is None:
-                gt_index = accepted_gt_for_proposal[batch_index].get(proposal_index)
+                if proposal_index < 0:
+                    gt_index = -proposal_index - 1
+                elif batch_index < len(accepted_gt_for_proposal):
+                    gt_index = accepted_gt_for_proposal[batch_index].get(proposal_index)
             line_id = None
             if gt_index is not None and 0 <= gt_index < len(line_items):
                 value = line_items[gt_index].get("id")
@@ -555,23 +587,30 @@ class PrismOCRLoss(nn.Module):
                 )
 
         ctc_by_bucket: dict[int, list[tuple[torch.Tensor, tuple[int, ...]]]] = {}
-        for bucket, group in outputs["ocr_groups"].items():
+        for bucket, group in outputs.get("ocr_groups", {}).items():
             bucket_samples = ctc_by_bucket.setdefault(int(bucket), [])
             refs = group["refs"].detach().cpu().tolist()
             logits = group["logits"]
             for local_index, (batch_index, proposal_index) in enumerate(refs):
-                gt_for_proposal = accepted_gt_for_proposal[batch_index]
-                if proposal_index not in gt_for_proposal:
+                if proposal_index < 0:
+                    gt_index = -proposal_index - 1
+                else:
+                    if batch_index >= len(accepted_gt_for_proposal):
+                        continue
+                    gt_for_proposal = accepted_gt_for_proposal[batch_index]
+                    if proposal_index not in gt_for_proposal:
+                        continue
+                    gt_index = gt_for_proposal[proposal_index]
+                if batch_index >= len(line_items_by_batch) or gt_index >= len(line_items_by_batch[batch_index]):
                     continue
-                line = line_items_by_batch[batch_index][gt_for_proposal[proposal_index]]
+                line = line_items_by_batch[batch_index][gt_index]
                 encoded = self.vocabulary.encode(str(line.get("text", "")))
-                oov_count += len(encoded.oov_positions)
                 if not encoded.ids:
                     continue
                 required = minimum_ctc_frames(encoded.ids)
                 if required > int(bucket):
                     reason = f"requires_{required}_frames_but_bucket_is_{bucket}"
-                    record_ctc_rejection(batch_index, proposal_index, reason)
+                    record_ctc_rejection(batch_index, proposal_index, reason, gt_index=gt_index)
                     continue
                 bucket_samples.append((logits[local_index].float().log_softmax(-1), encoded.ids))
 
@@ -580,10 +619,20 @@ class PrismOCRLoss(nn.Module):
         if region_box_terms:
             box_loss = box_loss + torch.stack(region_box_terms).mean()
         grid_loss = torch.stack(grid_terms).mean() if grid_terms else zero
+        role_loss = torch.stack(role_terms).mean() if role_terms else zero
+        graph_loss = torch.stack(graph_terms).mean() if graph_terms else zero
         if batch_size:
-            role_loss = role_loss / max(1, sum(state != "unavailable" for state in line_states))
             region_loss = region_loss / batch_size
-            graph_loss = graph_loss / batch_size
+
+        rejected_oov_line_count = sum(
+            1 for item in outputs.get("ocr_unsupported", ())
+            if len(item) >= 3 and item[2] == "ctc_oov_characters"
+        )
+        oov_character_count = sum(
+            len(self.vocabulary.encode(str(line.get("text", ""))).oov_positions)
+            for line_items in line_items_by_batch
+            for line in line_items
+        )
 
         ctc_terms: list[torch.Tensor] = []
         for bucket, samples in ctc_by_bucket.items():
@@ -640,7 +689,8 @@ class PrismOCRLoss(nn.Module):
                 key=lambda item: (item["page_id"], item["line_id"] or "", item["proposal_index"], item["reason"]),
             )),
             "ctc_rejected_sample_count": len(rejected_ctc),
-            "oov_character_count": oov_count,
+            "rejected_oov_line_count": rejected_oov_line_count,
+            "oov_character_count": oov_character_count,
             "unmatched_relation_count": unmatched_relations,
             "grid_supervision_exclusions": tuple(sorted(
                 grid_exclusions,

@@ -54,6 +54,15 @@ result = engine.predict(image, InferenceOptions(return_debug=True)).to_dict()
 
 Scores remain `null` unless a model-bound calibration artifact is supplied. The API handles one page per call and supports overlapping high-resolution tiling with overflow retries and cross-tile stitching. It always decodes typed `NEXT`, `PARENT`, `KV_VALUE`, `RIGHT_CELL`, and `PARENT`-derived `CONTAINS` relations, applying validation-fitted calibrators to relation and detector scores when a bound calibration artifact is present, and falls back to geometry only when the relation head supplies no usable scores. Independent per-column reading-order scopes and `RIGHT_CELL`-informed table placement are implemented. `emit_character_confidence=True` reports uncalibrated greedy-CTC frame posteriors, not calibrated character probabilities. `page_resolution` can resize a page and remove small text detail.
 
+## Project milestones
+
+The engineering delivery is delineated into four progressive milestones:
+
+- **Milestone 1: Corpus Built** (conversion, composition, shard caching, and split tools implemented and tested; local raw files staged)
+- **Milestone 2: Labels QA'd** (human verification of real scene annotations and upstream licenses; pending full human audit)
+- **Milestone 3: Model Trained** (architecture with fused text head, anchor supervision, CTC warmup, and cosine schedule implemented; awaiting full-scale training run)
+- **Milestone 4: Model Validated** (release checkpoint evaluated against human-audited real test set and hardware latency profile)
+
 ## Scope and release status
 
 The code includes oriented geometry, proposal and region heads, sparse compact CTC recognition, typed graph decoding, learned row/column/span/header heads, `RIGHT_CELL`-guided table reconstruction, high-resolution tiling, corpus conversion and grouped-split tools, validation-only Platt calibration fitting with reliability reports, structured evaluation and benchmarking, and training/evaluation/export entry points. `python -m prismocr.verify` runs the full software suite.

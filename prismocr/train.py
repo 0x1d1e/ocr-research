@@ -24,8 +24,10 @@ from torch.utils.data import DataLoader
 
 from prismocr.api import save_artifact
 from prismocr.data.dataset import PrismPageDataset, collate_pages, dataset_content_sha256
+from prismocr.data.schema import resolve_line_supervision
 from prismocr.data.vocabulary import Vocabulary
 from prismocr.eval import evaluate
+from prismocr.geometry import rotated_iou
 from prismocr.losses import PrismOCRLoss
 from prismocr.model.heads import validate_model_contract_version
 from prismocr.model.network import PrismOCRModel
@@ -100,6 +102,7 @@ def _resolved_settings(
             "max_table_rows": int(model_config.get("max_table_rows", 128)),
             "max_table_cols": int(model_config.get("max_table_cols", 128)),
             "max_cell_span": int(model_config.get("max_cell_span", 32)),
+            "fused_text_head": bool(model_config.get("fused_text_head", False)),
         },
         "training": {
             # Raw annotation hashes remain compatible; optimizer/loss semantics do not.
@@ -112,6 +115,7 @@ def _resolved_settings(
             "num_workers": num_workers,
             "max_page_side": train_config.get("max_page_side"),
             "learning_rate": float(train_config.get("learning_rate", 1e-4)),
+            "lr_warmup_steps": int(train_config.get("lr_warmup_steps", train_config.get("warmup_steps", 0))),
             "weight_decay": float(train_config.get("weight_decay", 1e-4)),
             "max_grad_norm": float(train_config.get("max_grad_norm", 5.0)),
             "gradient_accumulation_steps": int(train_config.get("gradient_accumulation_steps", 1)),
@@ -196,6 +200,7 @@ def _checkpoint_state(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     *,
+    scheduler: Any = None,
     epoch: int,
     step: int,
     generator: torch.Generator,
@@ -210,6 +215,7 @@ def _checkpoint_state(
         "format_version": CHECKPOINT_FORMAT_VERSION,
         "model_state": _cpu_model_state(model),
         "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": scheduler.state_dict() if scheduler is not None else None,
         "scaler_state": scaler_state,
         "epoch": epoch,
         "step": step,
@@ -294,6 +300,8 @@ def _is_better(candidate: dict[str, Any], current: dict[str, float] | None) -> b
     Recall and CER are undefined on a validation manifest with no ground-truth
     lines, where zero-denominator recall reads as 1.0. Comparing failure counts
     first keeps an epoch that cannot run inference from displacing a working one.
+    When operating threshold yields no accepted detections (e.g. recall == 0.0) or
+    on exact ties, threshold-free detection metrics (mean proposal IoU) track progress.
     """
     recall = float(candidate["line_detection_recall_at_iou"])
     cer = float(candidate["cer_on_matched_detections_with_misses_as_empty"])
@@ -309,7 +317,106 @@ def _is_better(candidate: dict[str, Any], current: dict[str, float] | None) -> b
         return failures < best_failures
     best_recall = float(current["line_detection_recall_at_iou"])
     best_cer = float(current["cer_on_matched_detections_with_misses_as_empty"])
-    return recall > best_recall or (recall == best_recall and cer < best_cer)
+    if recall != best_recall:
+        return recall > best_recall
+    if recall > 0.0:
+        if cer != best_cer:
+            return cer < best_cer
+    # Break ties or evaluate when recall == 0.0 using threshold-free detection metrics
+    cand_tf = float(candidate.get("mean_proposal_iou", candidate.get("proposal_ap_50", 0.0)))
+    curr_tf = float(current.get("mean_proposal_iou", current.get("proposal_ap_50", 0.0)))
+    if cand_tf != curr_tf:
+        return cand_tf > curr_tf
+    if cer != best_cer:
+        return cer < best_cer
+    return False
+
+
+def _compute_threshold_free_metrics(
+    model: Any,
+    validation_dataset: PrismPageDataset,
+    device: str | torch.device,
+) -> dict[str, float]:
+    if not hasattr(model, "backbone") or not hasattr(model, "text_head"):
+        return {"mean_proposal_iou": 0.0, "proposal_ap_50": 0.0}
+
+    dev = torch.device(device)
+    was_training = model.training
+    model.eval()
+
+    all_scores: list[float] = []
+    all_is_tp: list[bool] = []
+    max_ious_per_gt: list[float] = []
+
+    try:
+        with torch.inference_mode():
+            for idx in range(len(validation_dataset)):
+                image, target = validation_dataset[idx]
+                if resolve_line_supervision(target) == "unavailable":
+                    continue
+                gt_lines = [line for line in target.get("lines", ()) if "box" in line]
+                if not gt_lines:
+                    continue
+                images, _ = collate_pages([(image, target)])
+                images = images.to(dev)
+                outputs = model(images, text_threshold=0.0)
+                pred_boxes = outputs["text"]["boxes"][0].cpu().numpy()
+                pred_scores = outputs["text"]["scores"][0].cpu().numpy()
+                gt_boxes = np.array([line["box"] for line in gt_lines], dtype=np.float64)
+                img_size = (images.shape[-1], images.shape[-2])
+
+                iou_matrix = np.zeros((len(pred_boxes), len(gt_boxes)), dtype=np.float64)
+                for p_idx in range(len(pred_boxes)):
+                    for g_idx in range(len(gt_boxes)):
+                        iou_matrix[p_idx, g_idx] = rotated_iou(
+                            pred_boxes[p_idx], gt_boxes[g_idx], image_size=img_size
+                        )
+
+                for g_idx in range(len(gt_boxes)):
+                    max_ious_per_gt.append(float(np.max(iou_matrix[:, g_idx])) if len(pred_boxes) else 0.0)
+
+                gt_matched = [False] * len(gt_boxes)
+                order = np.argsort(-pred_scores)
+                for p_idx in order:
+                    score = float(pred_scores[p_idx])
+                    all_scores.append(score)
+                    best_iou = 0.0
+                    best_gt = -1
+                    for g_idx in range(len(gt_boxes)):
+                        if iou_matrix[p_idx, g_idx] > best_iou:
+                            best_iou = float(iou_matrix[p_idx, g_idx])
+                            best_gt = g_idx
+                    if best_iou >= 0.5 and best_gt >= 0 and not gt_matched[best_gt]:
+                        gt_matched[best_gt] = True
+                        all_is_tp.append(True)
+                    else:
+                        all_is_tp.append(False)
+    finally:
+        if was_training:
+            model.train()
+
+    mean_iou = float(np.mean(max_ious_per_gt)) if max_ious_per_gt else 0.0
+
+    total_gt = len(max_ious_per_gt)
+    if total_gt == 0 or not all_scores:
+        ap = 0.0
+    else:
+        order = np.argsort(-np.array(all_scores))
+        sorted_tp = np.array(all_is_tp)[order]
+        tp_cumsum = np.cumsum(sorted_tp)
+        fp_cumsum = np.cumsum(~sorted_tp)
+        recalls = tp_cumsum / total_gt
+        precisions = tp_cumsum / (tp_cumsum + fp_cumsum)
+        ap = 0.0
+        for t in np.linspace(0, 1, 11):
+            prec_at_rec = precisions[recalls >= t]
+            ap += float(np.max(prec_at_rec)) if len(prec_at_rec) > 0 else 0.0
+        ap /= 11.0
+
+    return {
+        "mean_proposal_iou": round(mean_iou, 6),
+        "proposal_ap_50": round(float(ap), 6),
+    }
 
 
 def _evaluate_validation(
@@ -319,11 +426,27 @@ def _evaluate_validation(
     *,
     device: str,
     page_resolution: int | None = None,
+    validation_dataset: PrismPageDataset | None = None,
 ) -> dict[str, Any]:
     # Reuse the public evaluator to keep checkpoint selection aligned with reported metrics.
     with tempfile.TemporaryDirectory(prefix="prismocr-validation-") as temporary_dir:
         save_artifact(temporary_dir, model, vocabulary, model_version="v4.0.0-unvalidated")
-        return evaluate(manifest, temporary_dir, device=device, page_resolution=page_resolution)
+        metrics = evaluate(manifest, temporary_dir, device=device, page_resolution=page_resolution)
+
+    # Compute threshold-free detection metrics (e.g. average precision AP or mean proposal IoU to ground truth)
+    if validation_dataset is None:
+        try:
+            validation_dataset = PrismPageDataset(manifest, max_page_side=page_resolution)
+        except Exception:
+            validation_dataset = None
+
+    if validation_dataset is not None:
+        threshold_free = _compute_threshold_free_metrics(model, validation_dataset, device=device)
+        metrics.update(threshold_free)
+    else:
+        metrics.setdefault("mean_proposal_iou", 0.0)
+        metrics.setdefault("proposal_ap_50", 0.0)
+    return metrics
 
 
 def train(
@@ -377,6 +500,7 @@ def train(
     num_workers = int(train_config.get("num_workers", 0))
     if num_workers < 0:
         raise ValueError("num_workers cannot be negative")
+    num_workers = min(12, num_workers)
     accumulation_steps = int(train_config.get("gradient_accumulation_steps", 1))
     if accumulation_steps <= 0:
         raise ValueError("gradient_accumulation_steps must be positive")
@@ -436,6 +560,7 @@ def train(
         max_table_cols=resolved_settings["model"]["max_table_cols"],
         max_cell_span=resolved_settings["model"]["max_cell_span"],
         strip_buckets=resolved_settings["model"]["strip_buckets"],
+        fused_text_head=resolved_settings["model"]["fused_text_head"],
     ).to(selected_device)
     activation_checkpointing = bool(train_config.get("activation_checkpointing", False))
     if activation_checkpointing:
@@ -463,6 +588,18 @@ def train(
         lr=resolved_settings["training"]["learning_rate"],
         weight_decay=resolved_settings["training"]["weight_decay"],
     )
+    warmup_steps = int(train_config.get("lr_warmup_steps", train_config.get("warmup_steps", 0)))
+    steps_per_epoch = (len(data_loader) + accumulation_steps - 1) // accumulation_steps
+    total_steps = max(1, steps_per_epoch * selected_epochs)
+
+    def lr_lambda(current_step: int) -> float:
+        if warmup_steps > 0 and current_step < warmup_steps:
+            return float(current_step + 1) / float(max(1, warmup_steps))
+        progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        progress = min(1.0, max(0.0, progress))
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp and amp_dtype == torch.float16)
 
     checkpoint_path = output / "training-state.pt"
@@ -476,6 +613,11 @@ def train(
         _validate_resume(checkpoint, compatibility=compatibility, requested_epochs=selected_epochs)
         model.load_state_dict(checkpoint["model_state"], strict=True)
         optimizer.load_state_dict(checkpoint["optimizer_state"])
+        if "scheduler_state" in checkpoint and checkpoint["scheduler_state"] is not None:
+            scheduler.load_state_dict(checkpoint["scheduler_state"])
+        else:
+            for _ in range(int(checkpoint["step"])):
+                scheduler.step()
         start_epoch = checkpoint["epoch"]
         step = int(checkpoint["step"])
         best_model_state = checkpoint.get("best_model_state")
@@ -552,6 +694,7 @@ def train(
                 )
                 optimizer_updated = False
                 scaler_overflow_skipped = False
+                current_lr = float(optimizer.param_groups[0]["lr"])
                 if update_now:
                     scaler.unscale_(optimizer)
                     non_finite_gradients = [
@@ -587,12 +730,14 @@ def train(
                         scaler.step(optimizer)
                         scaler.update()
                         optimizer.zero_grad(set_to_none=True)
+                        scheduler.step()
                         optimizer_updated = True
                         step += 1
                 row = {
                     "epoch": epoch + 1,
                     "step": step,
                     "micro_step": micro_step + 1,
+                    "learning_rate": current_lr,
                     "optimizer_updated": optimizer_updated,
                     "scaler_overflow_skipped": scaler_overflow_skipped,
                     "teacher_force_ratio": teacher_ratio,
@@ -621,6 +766,7 @@ def train(
                     page_resolution=(
                         int(max_page_side) if max_page_side is not None else None
                     ),
+                    validation_dataset=validation_dataset,
                 )
                 improved = _is_better(epoch_metrics, best_metrics)
                 if improved:
@@ -632,6 +778,8 @@ def train(
                         "inference_failure_count": int(epoch_metrics["inference_failure_count"]),
                         "inference_failure_rate": float(epoch_metrics["inference_failure_rate"]),
                         "ground_truth_lines": int(epoch_metrics["ground_truth_lines"]),
+                        "mean_proposal_iou": float(epoch_metrics.get("mean_proposal_iou", 0.0)),
+                        "proposal_ap_50": float(epoch_metrics.get("proposal_ap_50", 0.0)),
                     }
                     best_model_state = _cpu_model_state(model)
                     best_epoch = epoch + 1
@@ -656,6 +804,7 @@ def train(
             state = _checkpoint_state(
                 model,
                 optimizer,
+                scheduler=scheduler,
                 epoch=epoch + 1,
                 step=step,
                 generator=generator,

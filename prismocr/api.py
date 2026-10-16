@@ -19,6 +19,7 @@ import torch
 from PIL import Image
 from torch.nn import functional as F
 
+from prismocr.data.orientation import exif_oriented
 from prismocr.data.vocabulary import DecodedText, Vocabulary
 from prismocr.geometry import polygon_area, polygon_intersection, rotated_box_to_polygon
 from prismocr.graph_decode import GraphNode, decode_graph, relation_candidate_error
@@ -320,7 +321,9 @@ class PrismOCR:
                 raise ValueError("calibration artifact does not match model configuration")
             if calibration.get("vocabulary_sha256") != vocabulary.sha256:
                 raise ValueError("calibration artifact does not match vocabulary")
-        model = PrismOCRModel(vocabulary=vocabulary, **config)
+        model_kwargs = dict(config)
+        model_kwargs["fused_text_head"] = config.get("fused_text_head", False)
+        model = PrismOCRModel(vocabulary=vocabulary, **model_kwargs)
         checkpoint = torch.load(weights_path, map_location="cpu", weights_only=True)
         state_dict = validated_model_state(checkpoint, config)
         model.load_state_dict(state_dict, strict=True)
@@ -343,10 +346,12 @@ class PrismOCR:
             calibration=calibration,
         )
 
+    from_artifact = load
+
     @staticmethod
     def _tensor_image(image: Any) -> tuple[torch.Tensor, int, int]:
         if isinstance(image, Image.Image):
-            array = np.asarray(image.convert("RGB"))
+            array = np.asarray(exif_oriented(image).convert("RGB"))
             tensor = torch.from_numpy(array.copy()).permute(2, 0, 1)
         elif isinstance(image, np.ndarray):
             if image.ndim != 3:
@@ -1655,6 +1660,7 @@ def save_artifact(
             "max_table_rows": getattr(model, "max_table_rows", 128),
             "max_table_cols": getattr(model, "max_table_cols", 128),
             "max_cell_span": getattr(model, "max_cell_span", 32),
+            "fused_text_head": getattr(model, "fused_text_head", False),
         }
         config_bytes = (json.dumps(config, indent=2) + "\n").encode("utf-8")
         config_path.write_bytes(config_bytes)

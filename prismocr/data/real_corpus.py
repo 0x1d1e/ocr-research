@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from prismocr.data.orientation import exif_oriented_size
 from prismocr.data.schema import TEXT_ROLES, validate_annotation
@@ -160,6 +160,7 @@ def compose_recognition_pages(
     reviewer: str,
     template_family_id: str,
     source_class: str = "derived",
+    source_dataset: str | None = None,
     seed: int = 42,
     image_size: tuple[int, int] = (1024, 1400),
     columns: int = 2,
@@ -182,6 +183,8 @@ def compose_recognition_pages(
         raise ValueError("pages must be a positive integer")
     if source_class not in {"real", "synthetic", "derived"}:
         raise ValueError("source_class must be real, synthetic, or derived")
+    if source_dataset is not None and (not isinstance(source_dataset, str) or not source_dataset.strip()):
+        raise ValueError("source_dataset must be a non-empty string when supplied")
     for field, value in (
         ("license_name", license_name),
         ("permission_reference", permission_reference),
@@ -231,6 +234,14 @@ def compose_recognition_pages(
     if column_width < 16:
         raise ValueError("image_size, margin, gutter and columns leave no usable column width")
 
+    labels_resolved = Path(labels_file).resolve()
+    labels_parent = labels_resolved.parent
+    if source_dataset is not None:
+        resolved_source_dataset = source_dataset.strip()
+    else:
+        parent_name = labels_parent.name
+        resolved_source_dataset = f"{parent_name}/{labels_resolved.name}" if parent_name else labels_resolved.name
+
     pool, skipped = read_recognition_labels(
         labels_file, prefix_filter=prefix_filter, max_characters=max_characters
     )
@@ -246,8 +257,10 @@ def compose_recognition_pages(
     document_stem = document_prefix or template_family_id
     total_lines = 0
     total_regions = 0
+    total_relations = 0
     total_characters = 0
     unreadable = 0
+    crop_hashes: dict[Path, str] = {}
 
     for page_index in range(pages):
         # A per-page stream keeps every page reproducible regardless of process
@@ -317,6 +330,14 @@ def compose_recognition_pages(
                 canvas.paste(tile, (int(round(tile_x)), int(round(tile_y))))
                 line_id = f"{page_id}:l{page_line_index:03d}"
                 page_line_index += 1
+                try:
+                    resolved_crop = Path(crop_path).resolve()
+                    source_crop_id = str(resolved_crop.relative_to(labels_parent))
+                except ValueError:
+                    source_crop_id = str(crop_path)
+                if resolved_crop not in crop_hashes:
+                    crop_hashes[resolved_crop] = _sha256(resolved_crop)
+                source_crop_hash = crop_hashes[resolved_crop]
                 placed.append(
                     {
                         "id": line_id,
@@ -324,6 +345,8 @@ def compose_recognition_pages(
                         "text": text,
                         "role": "PARA_LINE",
                         "scope_id": scope_id,
+                        "source_crop_id": source_crop_id,
+                        "source_crop_hash": source_crop_hash,
                     }
                 )
                 total_lines += 1
@@ -335,6 +358,7 @@ def compose_recognition_pages(
 
         line_records = [line for placed in column_lines for line in placed]
         regions: list[dict[str, Any]] = []
+        relations: list[dict[str, Any]] = []
         for column, placed in enumerate(column_lines):
             block: list[dict[str, Any]] = []
             previous_bottom: float | None = None
@@ -342,14 +366,25 @@ def compose_recognition_pages(
             for line in placed:
                 top = min(point[1] for point in line["polygon_px"])
                 if previous_bottom is not None and (top - previous_bottom) > 12.0:
-                    regions.append(_block_region(page_id, column, block_index, block))
+                    region = _block_region(page_id, column, block_index, block)
+                    regions.append(region)
+                    for bline in block:
+                        relations.append(
+                            {"type": "PARENT", "source": bline["id"], "target": region["id"]}
+                        )
                     block_index += 1
                     block = []
                 block.append(line)
                 previous_bottom = max(point[1] for point in line["polygon_px"])
             if block:
-                regions.append(_block_region(page_id, column, block_index, block))
+                region = _block_region(page_id, column, block_index, block)
+                regions.append(region)
+                for bline in block:
+                    relations.append(
+                        {"type": "PARENT", "source": bline["id"], "target": region["id"]}
+                    )
         total_regions += len(regions)
+        total_relations += len(relations)
 
         image_name = f"page-{page_offset + page_index:06d}{suffix}"
         image_path = image_dir / image_name
@@ -361,7 +396,7 @@ def compose_recognition_pages(
             "image": {"width": width, "height": height, "sha256": _sha256(image_path)},
             "provenance": {
                 "source_class": source_class,
-                "source_dataset": Path(labels_file).name,
+                "source_dataset": resolved_source_dataset,
                 "license": license_name,
                 "permission_reference": permission_reference,
                 "reviewer": reviewer,
@@ -371,7 +406,7 @@ def compose_recognition_pages(
             "lines": line_records,
             "regions": regions,
             "cells": [],
-            "relations": [],
+            "relations": relations,
             "reading_order": [line["id"] for line in line_records],
             "annotation": {
                 "source": "prismocr.data.real_corpus.compose_recognition_pages",
@@ -389,6 +424,345 @@ def compose_recognition_pages(
         "pages": len(rows),
         "lines": total_lines,
         "regions": total_regions,
+        "relations": total_relations,
+        "characters": total_characters,
+        "recognized_pool_rows": len(pool),
+        "skipped_rows": skipped,
+        "unreadable_crops": unreadable,
+        "seed": seed,
+        "page_offset": page_offset,
+        "image_format": image_format,
+        "status": "converted_requires_human_label_qa",
+    }
+
+
+def compose_table_pages(
+    labels_file: str | Path,
+    output_dir: str | Path,
+    *,
+    pages: int,
+    license_name: str,
+    permission_reference: str,
+    reviewer: str,
+    template_family_id: str,
+    source_class: str = "derived",
+    source_dataset: str | None = None,
+    seed: int = 42,
+    image_size: tuple[int, int] = (1024, 1400),
+    rows: tuple[int, int] | int = (2, 5),
+    cols: tuple[int, int] | int = (2, 4),
+    columns: tuple[int, int] | int | None = None,
+    header_probability: float = 0.5,
+    margin: int = 28,
+    cell_padding: int = 4,
+    rotation_degrees: float = 0.0,
+    scale_range: tuple[float, float] = (0.85, 1.15),
+    prefix_filter: str | None = None,
+    document_prefix: str | None = None,
+    page_offset: int = 0,
+    image_format: str = "PNG",
+    jpeg_quality: int = 90,
+    max_characters: int = 160,
+    draw_grid: bool = True,
+) -> dict[str, Any]:
+    """Compose page canvases containing structured table grids with typed relations."""
+    if isinstance(pages, bool) or not isinstance(pages, int) or pages <= 0:
+        raise ValueError("pages must be a positive integer")
+    if source_class not in {"real", "synthetic", "derived"}:
+        raise ValueError("source_class must be real, synthetic, or derived")
+    if source_dataset is not None and (not isinstance(source_dataset, str) or not source_dataset.strip()):
+        raise ValueError("source_dataset must be a non-empty string when supplied")
+    for field, value in (
+        ("license_name", license_name),
+        ("permission_reference", permission_reference),
+        ("reviewer", reviewer),
+        ("template_family_id", template_family_id),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} is required")
+    if (
+        not isinstance(image_size, tuple)
+        or len(image_size) != 2
+        or any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in image_size)
+    ):
+        raise ValueError("image_size must be a pair of positive integers (width, height)")
+
+    if columns is not None:
+        cols = columns
+
+    if isinstance(rows, int) and not isinstance(rows, bool):
+        rows_range = (rows, rows)
+    elif isinstance(rows, tuple) and len(rows) == 2 and all(isinstance(v, int) and not isinstance(v, bool) and v >= 1 for v in rows) and rows[0] <= rows[1]:
+        rows_range = rows
+    else:
+        raise ValueError("rows must be a positive integer or non-decreasing pair of positive integers")
+
+    if isinstance(cols, int) and not isinstance(cols, bool):
+        cols_range = (cols, cols)
+    elif isinstance(cols, tuple) and len(cols) == 2 and all(isinstance(v, int) and not isinstance(v, bool) and v >= 1 for v in cols) and cols[0] <= cols[1]:
+        cols_range = cols
+    else:
+        raise ValueError("cols must be a positive integer or non-decreasing pair of positive integers")
+
+    if isinstance(header_probability, bool) or not isinstance(header_probability, (int, float)) or not 0.0 <= header_probability <= 1.0:
+        raise ValueError("header_probability must be a float in [0.0, 1.0]")
+    if not 0.0 <= rotation_degrees <= 15.0:
+        raise ValueError("rotation_degrees must be in [0, 15]")
+    if (
+        not isinstance(scale_range, tuple)
+        or len(scale_range) != 2
+        or any(isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0 for value in scale_range)
+        or scale_range[0] > scale_range[1]
+    ):
+        raise ValueError("scale_range must be an increasing positive pair")
+    for field, value in (("margin", margin), ("cell_padding", cell_padding), ("page_offset", page_offset)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{field} must be a nonnegative integer")
+    image_format = image_format.upper()
+    if image_format not in {"PNG", "JPEG"}:
+        raise ValueError("image_format must be PNG or JPEG")
+    if isinstance(jpeg_quality, bool) or not isinstance(jpeg_quality, int) or not 1 <= jpeg_quality <= 100:
+        raise ValueError("jpeg_quality must be an integer in [1, 100]")
+
+    width, height = image_size
+    labels_resolved = Path(labels_file).resolve()
+    labels_parent = labels_resolved.parent
+    if source_dataset is not None:
+        resolved_source_dataset = source_dataset.strip()
+    else:
+        parent_name = labels_parent.name
+        resolved_source_dataset = f"{parent_name}/{labels_resolved.name}" if parent_name else labels_resolved.name
+
+    pool, skipped = read_recognition_labels(
+        labels_file, prefix_filter=prefix_filter, max_characters=max_characters
+    )
+    if not pool:
+        raise ValueError(f"no valid recognition crops found in {labels_file}")
+
+    output = Path(output_dir).resolve()
+    image_dir = output / "images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    suffix = ".png" if image_format == "PNG" else ".jpg"
+    save_options = {"format": image_format}
+    if image_format == "JPEG":
+        save_options["quality"] = jpeg_quality
+    rows_records: list[dict[str, Any]] = []
+    document_stem = document_prefix or template_family_id
+    total_lines = 0
+    total_regions = 0
+    total_cells = 0
+    total_relations = 0
+    total_characters = 0
+    unreadable = 0
+    crop_hashes: dict[Path, str] = {}
+
+    for page_index in range(pages):
+        rng = random.Random(f"{seed}:{page_offset + page_index}")
+        document_id = f"{document_stem}:{page_offset + page_index:06d}"
+        page_id = f"{document_id}:page:0"
+        canvas = Image.new("RGB", image_size, (255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+
+        num_rows = rng.randint(*rows_range)
+        num_cols = rng.randint(*cols_range)
+        has_header = rng.random() < header_probability
+
+        tbl_x0 = float(margin)
+        tbl_y0 = float(margin)
+        tbl_x1 = float(width - margin)
+        tbl_y1 = float(height - margin)
+
+        if tbl_x1 <= tbl_x0 + num_cols * 8 or tbl_y1 <= tbl_y0 + num_rows * 8:
+            raise ValueError("image_size and margin leave insufficient space for table grid")
+
+        cw = (tbl_x1 - tbl_x0) / num_cols
+        rh = (tbl_y1 - tbl_y0) / num_rows
+
+        table_id = f"{page_id}:table:0"
+        table_polygon = [
+            [round(tbl_x0, 2), round(tbl_y0, 2)],
+            [round(tbl_x1, 2), round(tbl_y0, 2)],
+            [round(tbl_x1, 2), round(tbl_y1, 2)],
+            [round(tbl_x0, 2), round(tbl_y1, 2)],
+        ]
+
+        if draw_grid:
+            draw.rectangle(
+                [int(round(tbl_x0)), int(round(tbl_y0)), int(round(tbl_x1)), int(round(tbl_y1))],
+                outline=(0, 0, 0),
+                width=1,
+            )
+            for c in range(1, num_cols):
+                line_x = int(round(tbl_x0 + c * cw))
+                draw.line([(line_x, int(round(tbl_y0))), (line_x, int(round(tbl_y1)))], fill=(180, 180, 180), width=1)
+            for r in range(1, num_rows):
+                line_y = int(round(tbl_y0 + r * rh))
+                draw.line([(int(round(tbl_x0)), line_y), (int(round(tbl_x1)), line_y)], fill=(180, 180, 180), width=1)
+            if has_header and num_rows > 1:
+                hdr_y = int(round(tbl_y0 + rh))
+                draw.line([(int(round(tbl_x0)), hdr_y), (int(round(tbl_x1)), hdr_y)], fill=(0, 0, 0), width=2)
+
+        page_lines: list[dict[str, Any]] = []
+        page_cells: list[dict[str, Any]] = []
+        page_relations: list[dict[str, Any]] = []
+        page_line_index = 0
+
+        for r in range(num_rows):
+            for c in range(num_cols):
+                cx0 = tbl_x0 + c * cw
+                cx1 = tbl_x0 + (c + 1) * cw
+                cy0 = tbl_y0 + r * rh
+                cy1 = tbl_y0 + (r + 1) * rh
+                cell_id = f"{page_id}:c{r}_{c}"
+                is_header_cell = bool(has_header and r == 0)
+
+                cell_poly = [
+                    [round(cx0, 2), round(cy0, 2)],
+                    [round(cx1, 2), round(cy0, 2)],
+                    [round(cx1, 2), round(cy1, 2)],
+                    [round(cx0, 2), round(cy1, 2)],
+                ]
+                cell_record = {
+                    "id": cell_id,
+                    "table_id": table_id,
+                    "row": r,
+                    "col": c,
+                    "rowspan": 1,
+                    "colspan": 1,
+                    "header": is_header_cell,
+                    "is_header": is_header_cell,
+                    "polygon_px": cell_poly,
+                }
+                page_cells.append(cell_record)
+
+                # PARENT: cell -> table
+                page_relations.append({"type": "PARENT", "source": cell_id, "target": table_id})
+
+                # RIGHT_CELL: cell (r, c) -> cell (r, c+1)
+                if c < num_cols - 1:
+                    next_cell_id = f"{page_id}:c{r}_{c + 1}"
+                    page_relations.append({"type": "RIGHT_CELL", "source": cell_id, "target": next_cell_id})
+
+                pad = max(1, cell_padding)
+                avail_w = (cx1 - cx0) - 2 * pad
+                avail_h = (cy1 - cy0) - 2 * pad
+
+                crop_placed = False
+                attempts = 0
+                while not crop_placed and attempts < 8:
+                    attempts += 1
+                    crop_path, text = pool[rng.randrange(len(pool))]
+                    try:
+                        with Image.open(crop_path) as handle:
+                            crop = handle.convert("RGB")
+                    except OSError:
+                        unreadable += 1
+                        continue
+
+                    target_scale = rng.uniform(*scale_range)
+                    scale = min(target_scale, avail_w / max(1, crop.width), avail_h / max(1, crop.height))
+                    resized_w = max(3, int(round(crop.width * scale)))
+                    resized_h = max(3, int(round(crop.height * scale)))
+                    if resized_w > avail_w:
+                        resized_w = max(1, int(avail_w))
+                    if resized_h > avail_h:
+                        resized_h = max(1, int(avail_h))
+
+                    crop = crop.resize((resized_w, resized_h), Image.Resampling.BILINEAR)
+
+                    offset_x = rng.uniform(0.0, max(0.0, avail_w - resized_w))
+                    offset_y = rng.uniform(0.0, max(0.0, avail_h - resized_h))
+                    paste_x = cx0 + pad + offset_x
+                    paste_y = cy0 + pad + offset_y
+
+                    canvas.paste(crop, (int(round(paste_x)), int(round(paste_y))))
+                    line_poly = [
+                        [round(paste_x, 2), round(paste_y, 2)],
+                        [round(paste_x + resized_w, 2), round(paste_y, 2)],
+                        [round(paste_x + resized_w, 2), round(paste_y + resized_h, 2)],
+                        [round(paste_x, 2), round(paste_y + resized_h, 2)],
+                    ]
+
+                    line_id = f"{page_id}:l{page_line_index:03d}"
+                    page_line_index += 1
+
+                    try:
+                        resolved_crop = Path(crop_path).resolve()
+                        source_crop_id = str(resolved_crop.relative_to(labels_parent))
+                    except ValueError:
+                        source_crop_id = str(crop_path)
+                    if resolved_crop not in crop_hashes:
+                        crop_hashes[resolved_crop] = _sha256(resolved_crop)
+                    source_crop_hash = crop_hashes[resolved_crop]
+
+                    line_record = {
+                        "id": line_id,
+                        "polygon_px": line_poly,
+                        "text": text,
+                        "role": "PARA_LINE",
+                        "scope_id": table_id,
+                        "source_crop_id": source_crop_id,
+                        "source_crop_hash": source_crop_hash,
+                    }
+                    page_lines.append(line_record)
+                    total_lines += 1
+                    total_characters += len(text)
+
+                    # PARENT: line -> cell
+                    page_relations.append({"type": "PARENT", "source": line_id, "target": cell_id})
+                    crop_placed = True
+
+        total_cells += len(page_cells)
+        total_regions += 1
+        total_relations += len(page_relations)
+
+        table_region = {
+            "id": table_id,
+            "kind": "TABLE",
+            "polygon_px": table_polygon,
+            "annotation_ambiguous": False,
+        }
+
+        image_name = f"page-{page_offset + page_index:06d}{suffix}"
+        image_path = image_dir / image_name
+        canvas.save(image_path, **save_options)
+        annotation = {
+            "schema_version": "4.0",
+            "document_id": document_id,
+            "page_id": page_id,
+            "image": {"width": width, "height": height, "sha256": _sha256(image_path)},
+            "provenance": {
+                "source_class": source_class,
+                "source_dataset": resolved_source_dataset,
+                "license": license_name,
+                "permission_reference": permission_reference,
+                "reviewer": reviewer,
+                "template_family_id": template_family_id,
+            },
+            "supervision": {"lines": "complete"},
+            "lines": page_lines,
+            "regions": [table_region],
+            "cells": page_cells,
+            "relations": page_relations,
+            "reading_order": [line["id"] for line in page_lines],
+            "annotation": {
+                "source": "prismocr.data.real_corpus.compose_table_pages",
+                "composition_seed": seed,
+            },
+        }
+        validate_annotation(annotation)
+        rows_records.append({"image_path": str(image_path), "annotation": annotation})
+
+    manifest = output / "manifest.jsonl"
+    _write_jsonl(manifest, rows_records)
+    return {
+        "manifest": str(manifest),
+        "manifest_sha256": _sha256(manifest),
+        "pages": len(rows_records),
+        "lines": total_lines,
+        "regions": total_regions,
+        "cells": total_cells,
+        "relations": total_relations,
         "characters": total_characters,
         "recognized_pool_rows": len(pool),
         "skipped_rows": skipped,

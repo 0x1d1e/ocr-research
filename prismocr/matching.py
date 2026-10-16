@@ -8,7 +8,12 @@ from typing import Sequence
 import numpy as np
 import torch
 
-from prismocr.geometry import rotated_iou
+from prismocr.geometry import (
+    polygon_area,
+    polygon_intersection,
+    rotated_box_to_polygon,
+    rotated_iou,
+)
 
 
 def linear_sum_assignment(cost: np.ndarray | Sequence[Sequence[float]]) -> tuple[np.ndarray, np.ndarray]:
@@ -188,15 +193,70 @@ def match_proposals(
     cost = np.zeros((gt_count, len(candidate_indices)), dtype=np.float64)
     qualities = np.zeros_like(cost)
     width_px, height_px = image_size
+    if supplied_quality is None:
+        gt_polys = []
+        gt_aabbs = []
+        gt_areas = []
+        for gt in truths:
+            try:
+                poly = rotated_box_to_polygon(gt, image_size)
+                area = polygon_area(poly)
+                if area > 0:
+                    xs = (poly[0][0], poly[1][0], poly[2][0], poly[3][0])
+                    ys = (poly[0][1], poly[1][1], poly[2][1], poly[3][1])
+                    aabb = (min(xs), min(ys), max(xs), max(ys))
+                else:
+                    poly, aabb, area = None, None, 0.0
+            except (TypeError, ValueError, OverflowError):
+                poly, aabb, area = None, None, 0.0
+            gt_polys.append(poly)
+            gt_aabbs.append(aabb)
+            gt_areas.append(area)
+
+        pred_polys = []
+        pred_aabbs = []
+        pred_areas = []
+        for pred_i in candidate_indices:
+            pred = preds[pred_i]
+            try:
+                poly = rotated_box_to_polygon(pred, image_size)
+                area = polygon_area(poly)
+                if area > 0:
+                    xs = (poly[0][0], poly[1][0], poly[2][0], poly[3][0])
+                    ys = (poly[0][1], poly[1][1], poly[2][1], poly[3][1])
+                    aabb = (min(xs), min(ys), max(xs), max(ys))
+                else:
+                    poly, aabb, area = None, None, 0.0
+            except (TypeError, ValueError, OverflowError):
+                poly, aabb, area = None, None, 0.0
+            pred_polys.append(poly)
+            pred_aabbs.append(aabb)
+            pred_areas.append(area)
+
     for gt_i, gt in enumerate(truths):
         gt_cx, gt_cy, gt_w, gt_h = gt[:4]
+        gt_aabb = None if supplied_quality is not None else gt_aabbs[gt_i]
+        gt_poly = None if supplied_quality is not None else gt_polys[gt_i]
+        gt_area = 0.0 if supplied_quality is not None else gt_areas[gt_i]
         for local_i, pred_i in enumerate(candidate_indices):
             pred = preds[pred_i]
-            iou = (
-                float(supplied_quality[gt_i, pred_i])
-                if supplied_quality is not None
-                else rotated_iou(gt, pred, image_size)
-            )
+            if supplied_quality is not None:
+                iou = float(supplied_quality[gt_i, pred_i])
+            elif gt_aabb is None or pred_aabbs[local_i] is None:
+                iou = 0.0
+            else:
+                gt_min_x, gt_min_y, gt_max_x, gt_max_y = gt_aabb
+                pred_min_x, pred_min_y, pred_max_x, pred_max_y = pred_aabbs[local_i]
+                if (
+                    gt_max_x < pred_min_x
+                    or pred_max_x < gt_min_x
+                    or gt_max_y < pred_min_y
+                    or pred_max_y < gt_min_y
+                ):
+                    iou = 0.0
+                else:
+                    intersection = polygon_area(polygon_intersection(gt_poly, pred_polys[local_i]))
+                    iou = min(1.0, max(0.0, intersection / max(1e-12, gt_area + pred_areas[local_i] - intersection)))
             qualities[gt_i, local_i] = iou
             dx = (pred[0] - gt_cx) * width_px
             dy = (pred[1] - gt_cy) * height_px

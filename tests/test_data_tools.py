@@ -29,6 +29,7 @@ class DataToolsTests(unittest.TestCase):
         *,
         document_id: str | None = None,
         family_id: str | None = None,
+        lines: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
         directory.mkdir(parents=True, exist_ok=True)
         image_path = directory / f"{page_id}.png"
@@ -42,6 +43,7 @@ class DataToolsTests(unittest.TestCase):
         }
         if family_id is not None:
             provenance["template_family_id"] = family_id
+        page_lines = lines if lines is not None else []
         annotation = {
             "schema_version": "4.0",
             "document_id": document,
@@ -52,11 +54,11 @@ class DataToolsTests(unittest.TestCase):
                 "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
             },
             "provenance": provenance,
-            "lines": [],
+            "lines": page_lines,
             "regions": [],
             "cells": [],
             "relations": [],
-            "reading_order": [],
+            "reading_order": [line["id"] for line in page_lines],
         }
         return {"image_path": str(image_path), "annotation": annotation}
 
@@ -312,6 +314,138 @@ class DataToolsTests(unittest.TestCase):
             self.assertEqual(len(containing), 1, left)
             self.assertIn(f"doc-{right}:page-0", split_pages[containing[0]])
         self.assertTrue(all(split_pages.values()))
+
+    def test_source_crop_grouping_and_split_disjointness(self) -> None:
+        from prismocr.data.tools import _group_records, _split_membership
+
+        directory = self.root / "crop-split-data"
+        p1 = self._write_page(
+            directory,
+            "crop-page-1",
+            np.zeros((10, 10, 3), dtype=np.uint8),
+            lines=[
+                {
+                    "id": "doc-crop-page-1:l0",
+                    "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]],
+                    "text": "test",
+                    "role": "PARA_LINE",
+                    "source_crop_id": "crops/shared_crop.png",
+                    "source_crop_hash": "a" * 64,
+                }
+            ],
+        )
+        p2 = self._write_page(
+            directory,
+            "crop-page-2",
+            np.ones((10, 10, 3), dtype=np.uint8) * 100,
+            lines=[
+                {
+                    "id": "doc-crop-page-2:l0",
+                    "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]],
+                    "text": "other",
+                    "role": "PARA_LINE",
+                    "source_crop_id": "crops/shared_crop.png",
+                    "source_crop_hash": "a" * 64,
+                }
+            ],
+        )
+        p3 = self._write_page(
+            directory,
+            "crop-page-3",
+            np.ones((10, 10, 3), dtype=np.uint8) * 200,
+            lines=[
+                {
+                    "id": "doc-crop-page-3:l0",
+                    "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]],
+                    "text": "third",
+                    "role": "PARA_LINE",
+                    "source_crop_id": "crops/different_crop.png",
+                    "source_crop_hash": "b" * 64,
+                }
+            ],
+        )
+        dataset = object.__new__(PrismPageDataset)
+        dataset.records = [p1, p2, p3]
+        groups = _group_records(dataset, near_duplicate_hamming=None)
+        self.assertEqual(len(groups), 2)
+        group_with_p1 = [g for g in groups if 0 in g][0]
+        self.assertIn(1, group_with_p1)
+
+        leak_split = {"train": [p1], "validation": [p2], "test": [p3]}
+        with self.assertRaisesRegex(ValueError, "a source crop spans more than one split"):
+            _split_membership(leak_split, near_duplicate_hamming=None)
+
+        clean_split = {
+            "train": [p1, p2],
+            "validation": [p3],
+            "test": [self._write_page(directory, "p4", np.full((10, 10, 3), 255, dtype=np.uint8))],
+        }
+        membership = _split_membership(clean_split, near_duplicate_hamming=None)
+        self.assertEqual(membership["source_crop_counts"]["train"], 1)
+        self.assertEqual(membership["source_crop_counts"]["validation"], 1)
+        self.assertEqual(membership["source_crop_counts"]["test"], 0)
+        self.assertEqual(membership["split_fingerprints"]["train"]["source_crop_sha256"], ["a" * 64])
+        self.assertEqual(membership["split_fingerprints"]["validation"]["source_crop_sha256"], ["b" * 64])
+        self.assertEqual(membership["split_fingerprints"]["test"]["source_crop_sha256"], [])
+
+    def test_split_report_transcript_and_ngram_overlap(self) -> None:
+        directory = self.root / "overlap-images"
+        train_row = self._write_page(
+            directory,
+            "train-p",
+            np.zeros((10, 10, 3), dtype=np.uint8),
+            lines=[
+                {"id": "l0", "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]], "text": "ជិះម៉ូតបុករថយន្ត", "role": "PARA_LINE"},
+                {"id": "l1", "polygon_px": [[0, 5], [10, 5], [10, 10], [0, 10]], "text": "apple pie", "role": "PARA_LINE"},
+            ],
+        )
+        val_row = self._write_page(
+            directory,
+            "val-p",
+            np.ones((10, 10, 3), dtype=np.uint8) * 50,
+            lines=[
+                {"id": "l2", "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]], "text": "apple tree", "role": "PARA_LINE"},
+                {"id": "l3", "polygon_px": [[0, 5], [10, 5], [10, 10], [0, 10]], "text": "banana", "role": "PARA_LINE"},
+            ],
+        )
+        test_row = self._write_page(
+            directory,
+            "test-p",
+            np.ones((10, 10, 3), dtype=np.uint8) * 100,
+            lines=[
+                {"id": "l4", "polygon_px": [[0, 0], [10, 0], [10, 5], [0, 5]], "text": "apple pie", "role": "PARA_LINE"},
+            ],
+        )
+        output = self.root / "overlap-report"
+        manifests = {
+            "train": output / "train.jsonl",
+            "validation": output / "val.jsonl",
+            "test": output / "test.jsonl",
+        }
+        output.mkdir(parents=True, exist_ok=True)
+        self._write_manifest(manifests["train"], [train_row])
+        self._write_manifest(manifests["validation"], [val_row])
+        self._write_manifest(manifests["test"], [test_row])
+
+        report = write_split_report(output, manifests=manifests, seed=42)
+        self.assertIn("transcript_overlap", report)
+        overlap = report["transcript_overlap"]
+        self.assertIn("train_vs_val", overlap)
+        self.assertIn("train_vs_test", overlap)
+        self.assertIn("val_vs_test", overlap)
+
+        tv = overlap["train_vs_val"]
+        self.assertEqual(tv["exact_shared_count"], 0)
+        self.assertEqual(tv["exact_jaccard"], 0.0)
+        self.assertGreater(tv["ngram_shared_count"], 0)
+        self.assertGreater(tv["ngram_jaccard"], 0.0)
+        self.assertEqual(tv["ngram_jaccard"], tv["char_3gram_jaccard"])
+
+        tt = overlap["train_vs_test"]
+        self.assertEqual(tt["exact_shared_count"], 1)
+        self.assertEqual(tt["exact_jaccard"], 0.5)
+        self.assertGreater(tt["ngram_shared_count"], 0)
+        self.assertGreater(tt["ngram_jaccard"], 0.0)
 
 
 if __name__ == "__main__":

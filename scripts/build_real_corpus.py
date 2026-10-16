@@ -47,7 +47,7 @@ KHMERST_IMAGES = KHMERST_ROOT / "scene_img_data"
 COMPOSED_POOLS: dict[str, tuple[tuple[str, str, int, str, str, str, str, str], ...]] = {
     "train": (
         ("fintech-train", "images/fintech_train/", 6000, "synthetic", "fintech-ocr generated lines",
-         "generated", "fintech-ocr synthetic generator (local build)", "fintech-lines-train-v1"),
+         "NOASSERTION", "fintech-ocr synthetic generator (local build)", "fintech-lines-train-v1"),
         ("khmersynth-train", "images/khmersynth1m/", 6000, "synthetic", "KhmerSynthetic1M",
          "Apache-2.0", "KhmerSynthetic1M public release", "khmersynth-lines-train-v1"),
         ("wildkhmer-cropped-train", "images/wildkhmer_cropped/", 2000, "derived", "WildKhmerST cropped lines",
@@ -57,7 +57,7 @@ COMPOSED_POOLS: dict[str, tuple[tuple[str, str, int, str, str, str, str, str], .
     ),
     "val": (
         ("fintech-val", "images/fintech_val/", 400, "synthetic", "fintech-ocr generated lines",
-         "generated", "fintech-ocr synthetic generator (local build)", "fintech-lines-val-v1"),
+         "NOASSERTION", "fintech-ocr synthetic generator (local build)", "fintech-lines-val-v1"),
         ("khmersynth-val", "images/khmersynth1m/", 400, "synthetic", "KhmerSynthetic1M",
          "Apache-2.0", "KhmerSynthetic1M public release", "khmersynth-lines-val-v1"),
         ("wildkhmer-cropped-val", "images/wildkhmer_cropped/", 300, "derived", "WildKhmerST cropped lines",
@@ -67,7 +67,7 @@ COMPOSED_POOLS: dict[str, tuple[tuple[str, str, int, str, str, str, str, str], .
     ),
     "test": (
         ("fintech-test", "images/fintech_test/", 400, "synthetic", "fintech-ocr generated lines",
-         "generated", "fintech-ocr synthetic generator (local build)", "fintech-lines-test-v1"),
+         "NOASSERTION", "fintech-ocr synthetic generator (local build)", "fintech-lines-test-v1"),
         ("khmersynth-test", "images/khmersynth1m/", 400, "synthetic", "KhmerSynthetic1M",
          "Apache-2.0", "KhmerSynthetic1M public release", "khmersynth-lines-test-v1"),
         ("wildkhmer-cropped-test", "images/wildkhmer_cropped/", 300, "derived", "WildKhmerST cropped lines",
@@ -89,17 +89,37 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _make_shard_fingerprint(arguments: dict) -> dict:
+    labels_path = Path(arguments["labels"])
+    return {
+        "labels": str(labels_path),
+        "labels_sha256": _sha256(labels_path) if labels_path.is_file() else None,
+        "pages": arguments.get("pages"),
+        "license": arguments.get("license"),
+        "permission": arguments.get("permission"),
+        "template_family": arguments.get("template_family"),
+        "name": arguments.get("name"),
+        "source_class": arguments.get("source_class"),
+        "source_dataset": arguments.get("source_dataset"),
+        "seed": arguments.get("seed"),
+        "prefix": arguments.get("prefix"),
+        "page_offset": arguments.get("page_offset"),
+    }
+
+
 def _compose_shard(arguments: dict) -> dict:
-    return compose_recognition_pages(
+    output_dir = Path(arguments["output_dir"])
+    result = compose_recognition_pages(
         arguments["labels"],
-        arguments["output_dir"],
+        output_dir,
         pages=arguments["pages"],
         license_name=arguments["license"],
         permission_reference=arguments["permission"],
-        reviewer="prismocr-corpus-build",
+        reviewer="automated:prismocr-corpus-build",
         template_family_id=arguments["template_family"],
         document_prefix=arguments["name"],
         source_class=arguments["source_class"],
+        source_dataset=arguments.get("source_dataset"),
         seed=arguments["seed"],
         prefix_filter=arguments["prefix"],
         page_offset=arguments["page_offset"],
@@ -107,14 +127,32 @@ def _compose_shard(arguments: dict) -> dict:
         image_format="JPEG",
         max_characters=160,
     )
+    fingerprint = _make_shard_fingerprint(arguments)
+    fingerprint_path = output_dir / "shard_fingerprint.json"
+    fingerprint_path.write_text(json.dumps(fingerprint, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return result
 
 
-def _completed_shard(directory: Path, expected_pages: int) -> dict | None:
+def _completed_shard(
+    directory: Path, expected_pages: int, expected_fingerprint: dict | None = None
+) -> dict | None:
     """Return a summary for an already-composed shard, or None to rebuild it."""
     manifest = directory / "manifest.jsonl"
-    if not manifest.is_file():
+    fingerprint_path = directory / "shard_fingerprint.json"
+    if not manifest.is_file() or not fingerprint_path.is_file():
         return None
-    rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+    try:
+        stored_fingerprint = json.loads(fingerprint_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if expected_fingerprint is not None:
+        for key, expected_value in expected_fingerprint.items():
+            if stored_fingerprint.get(key) != expected_value:
+                return None
+    try:
+        rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except Exception:
+        return None
     if len(rows) != expected_pages or any(not Path(row["image_path"]).is_file() for row in rows):
         return None
     return {
@@ -126,7 +164,8 @@ def _completed_shard(directory: Path, expected_pages: int) -> dict | None:
 
 def _compose_or_reuse(arguments: dict) -> dict:
     """Module-level worker: reuse a complete shard manifest or compose the shard."""
-    cached = _completed_shard(Path(arguments["output_dir"]), arguments["pages"])
+    expected_fingerprint = _make_shard_fingerprint(arguments)
+    cached = _completed_shard(Path(arguments["output_dir"]), arguments["pages"], expected_fingerprint)
     return cached if cached is not None else _compose_shard(arguments)
 
 
@@ -162,6 +201,7 @@ def build_split(root: Path, split: str, jobs: int, seed: int) -> dict:
                 "template_family": family,
                 "name": f"{name}-s{offset // SHARD_PAGES:04d}",
                 "source_class": source_class,
+                "source_dataset": f"paddlex_rec_dataset/{split_file.name}",
                 "seed": seed + 1000 * (pool_index + 1),
                 "prefix": prefix,
                 "page_offset": offset,
@@ -186,47 +226,88 @@ def build_split(root: Path, split: str, jobs: int, seed: int) -> dict:
         print(f"  composed {split}/{name}: {merged['pages']} pages, {total_lines} lines", flush=True)
 
     khmerst_manifest = root / "khmerst" / f"{split}.jsonl"
+    khmerst_meta = khmerst_manifest.with_suffix(".meta.json")
     if not KHMERST_ANNOTATIONS.is_file() or not KHMERST_IMAGES.is_dir():
         print(
             f"  khmerst {split}: skipped; no annotations at {KHMERST_ANNOTATIONS} or images at {KHMERST_IMAGES}",
             flush=True,
         )
-    elif not khmerst_manifest.is_file():
-        records, skipped = read_khmerst_annotations(KHMERST_ANNOTATIONS)
-        assignment = assign_scene_splits([record["filename"] for record in records], seed=seed)
-        result = convert_khmerst_scene(
-            KHMERST_ANNOTATIONS,
-            KHMERST_IMAGES,
-            khmerst_manifest,
-            license_name="Apache-2.0",
-            permission_reference=(
-                "KhmerST public research benchmark (arXiv:2410.18277); cropped derivative release "
-                "SoyVitou/KhmerST-Dataset-OCR-Cropped declares Apache-2.0"
-            ),
-            reviewer="KhmerST_annotation_release",
-            document_prefix="khmerst",
-            split=split,
-            split_assignment=assignment,
-        )
-        print(
-            f"  khmerst {split}: {result['pages']} pages, {result['lines']} lines, skipped={skipped}",
-            flush=True,
-        )
+    else:
+        khmerst_expected_meta = {
+            "input_file_sha256": _sha256(KHMERST_ANNOTATIONS),
+            "seed": seed,
+            "split": split,
+            "limit": None,
+        }
+        rebuild_khmerst = True
+        if khmerst_manifest.is_file() and khmerst_meta.is_file():
+            try:
+                stored_meta = json.loads(khmerst_meta.read_text(encoding="utf-8"))
+                if stored_meta == khmerst_expected_meta:
+                    rebuild_khmerst = False
+            except Exception:
+                rebuild_khmerst = True
+        if rebuild_khmerst:
+            records, skipped = read_khmerst_annotations(KHMERST_ANNOTATIONS)
+            assignment = assign_scene_splits([record["filename"] for record in records], seed=seed)
+            result = convert_khmerst_scene(
+                KHMERST_ANNOTATIONS,
+                KHMERST_IMAGES,
+                khmerst_manifest,
+                license_name="Apache-2.0",
+                permission_reference=(
+                    "KhmerST public research benchmark (arXiv:2410.18277); cropped derivative release "
+                    "SoyVitou/KhmerST-Dataset-OCR-Cropped declares Apache-2.0"
+                ),
+                reviewer="automated:KhmerST_annotation_release",
+                document_prefix="khmerst",
+                split=split,
+                split_assignment=assignment,
+            )
+            khmerst_meta.write_text(
+                json.dumps(khmerst_expected_meta, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print(
+                f"  khmerst {split}: {result['pages']} pages, {result['lines']} lines, skipped={skipped}",
+                flush=True,
+            )
     if khmerst_manifest.is_file():
         manifests.append(khmerst_manifest)
 
     doclaynet_dir = root / "doclaynet"
     doclaynet_manifest = doclaynet_dir / f"{split}.jsonl"
-    if not doclaynet_manifest.is_file():
+    doclaynet_meta = doclaynet_manifest.with_suffix(".meta.json")
+    coco_input = DATASET_ROOT / "DocLayNet" / "extracted" / "COCO" / f"{split}.json"
+    doclaynet_limit = DOCLAYNET_LIMITS[split]
+    doclaynet_expected_meta = {
+        "input_file_sha256": _sha256(coco_input) if coco_input.is_file() else None,
+        "seed": seed,
+        "split": split,
+        "limit": doclaynet_limit,
+    }
+    rebuild_doclaynet = True
+    if doclaynet_manifest.is_file() and doclaynet_meta.is_file():
+        try:
+            stored_doclaynet_meta = json.loads(doclaynet_meta.read_text(encoding="utf-8"))
+            if stored_doclaynet_meta == doclaynet_expected_meta:
+                rebuild_doclaynet = False
+        except Exception:
+            rebuild_doclaynet = True
+    if rebuild_doclaynet:
         result = convert_coco_layout(
-            DATASET_ROOT / "DocLayNet" / "extracted" / "COCO" / f"{split}.json",
+            coco_input,
             DATASET_ROOT / "DocLayNet" / "extracted" / "PNG",
             doclaynet_manifest,
             license_name="CDLA-Permissive-1.0",
             permission_reference="DocLayNet v1.0 public release (CDLA-Permissive-1.0)",
-            reviewer="DocLayNet_annotation_release",
+            reviewer="automated:DocLayNet_annotation_release",
             document_prefix="doclaynet",
-            limit=DOCLAYNET_LIMITS[split],
+            limit=doclaynet_limit,
+        )
+        doclaynet_meta.write_text(
+            json.dumps(doclaynet_expected_meta, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
         )
         print(f"  doclaynet {split}: {result['pages']} pages, {result['regions']} regions", flush=True)
     manifests.append(doclaynet_manifest)

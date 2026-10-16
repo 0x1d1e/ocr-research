@@ -14,12 +14,14 @@ from prismocr.data.real_corpus import (
     _rotate_crop,
     assign_scene_splits,
     compose_recognition_pages,
+    compose_table_pages,
     concat_manifests,
     convert_coco_layout,
     convert_khmerst_scene,
     read_khmerst_annotations,
     read_recognition_labels,
 )
+from prismocr.data.schema import validate_annotation
 
 
 class RecognitionCompositionTests(unittest.TestCase):
@@ -74,6 +76,7 @@ class RecognitionCompositionTests(unittest.TestCase):
         self.assertEqual(result["pages"], 3)
         self.assertEqual(result["lines"], 9)
         self.assertEqual(result["regions"], 3)
+        self.assertEqual(result["relations"], 9)
         self.assertEqual(result["status"], "converted_requires_human_label_qa")
 
         dataset = PrismPageDataset(result["manifest"])
@@ -82,16 +85,24 @@ class RecognitionCompositionTests(unittest.TestCase):
             annotation = record["_annotation"]
             self.assertEqual(annotation["supervision"], {"lines": "complete"})
             self.assertEqual(annotation["provenance"]["source_class"], "derived")
+            self.assertEqual(annotation["provenance"]["source_dataset"], f"{self.root.name}/labels.txt")
             self.assertEqual(annotation["provenance"]["license"], "CC-BY-4.0")
             self.assertEqual(annotation["provenance"]["template_family_id"], "composed-lines-v1")
             self.assertEqual(annotation["reading_order"], [line["id"] for line in annotation["lines"]])
             self.assertEqual(len(annotation["regions"]), 1)
+            self.assertEqual(len(annotation["relations"]), 3)
+            region_id = annotation["regions"][0]["id"]
+            for relation in annotation["relations"]:
+                self.assertEqual(relation["type"], "PARENT")
+                self.assertEqual(relation["target"], region_id)
             region = annotation["regions"][0]["polygon_px"]
             page = np.asarray(Image.open(record["_image_path"]).convert("L"))
             self.assertEqual(page.shape, (320, 256))
             for line in annotation["lines"]:
                 self.assertIn(line["text"], self.texts)
                 self.assertEqual(line["role"], "PARA_LINE")
+                self.assertTrue(line["source_crop_id"].startswith("crops/line-"))
+                self.assertEqual(len(line["source_crop_hash"]), 64)
                 xs = [point[0] for point in line["polygon_px"]]
                 ys = [point[1] for point in line["polygon_px"]]
                 self.assertGreaterEqual(min(xs), 0.0)
@@ -106,6 +117,114 @@ class RecognitionCompositionTests(unittest.TestCase):
                 ]
                 self.assertLess(float(patch.mean()), 200.0, line["id"])
 
+    def test_compose_table_pages_generates_valid_table_grid_and_relations(self) -> None:
+        table_dir = self.root / "table_composed"
+        result = compose_table_pages(
+            self.labels,
+            table_dir,
+            pages=2,
+            license_name="CC-BY-4.0",
+            permission_reference="local-table-permission-1",
+            reviewer="qa-reviewer",
+            template_family_id="table-family-v1",
+            source_class="derived",
+            seed=42,
+            image_size=(300, 400),
+            rows=3,
+            cols=2,
+            header_probability=1.0,
+            margin=10,
+            cell_padding=2,
+        )
+
+        self.assertEqual(result["pages"], 2)
+        self.assertEqual(result["regions"], 2)
+        # 3 rows x 2 cols = 6 cells per page, 12 total across 2 pages
+        self.assertEqual(result["cells"], 12)
+        self.assertEqual(result["lines"], 12)
+        # Per page: 6 line->cell PARENT, 6 cell->table PARENT, 3 row-adjacent RIGHT_CELL = 15; 30 total
+        self.assertEqual(result["relations"], 30)
+        self.assertEqual(result["status"], "converted_requires_human_label_qa")
+
+        dataset = PrismPageDataset(result["manifest"])
+        self.assertEqual(len(dataset), 2)
+
+        for record in dataset.records:
+            annotation = record["_annotation"]
+            # Validate schema contract
+            validate_annotation(annotation)
+            self.assertEqual(annotation["supervision"], {"lines": "complete"})
+            self.assertEqual(annotation["provenance"]["template_family_id"], "table-family-v1")
+
+            # 1 TABLE region encompassing the grid
+            self.assertEqual(len(annotation["regions"]), 1)
+            table_region = annotation["regions"][0]
+            self.assertEqual(table_region["kind"], "TABLE")
+            self.assertFalse(table_region.get("annotation_ambiguous", False))
+            table_id = table_region["id"]
+
+            # 6 cells with correct grid coordinates, headers, and spans
+            cells = annotation["cells"]
+            self.assertEqual(len(cells), 6)
+            grid_positions = set()
+            cell_by_id = {}
+            for cell in cells:
+                cell_by_id[cell["id"]] = cell
+                self.assertEqual(cell["table_id"], table_id)
+                self.assertEqual(cell["rowspan"], 1)
+                self.assertEqual(cell["colspan"], 1)
+                r, c = cell["row"], cell["col"]
+                self.assertIn(r, (0, 1, 2))
+                self.assertIn(c, (0, 1))
+                grid_positions.add((r, c))
+                # Header row: row 0 is header, rows 1 and 2 are not
+                if r == 0:
+                    self.assertTrue(cell["header"])
+                    self.assertTrue(cell["is_header"])
+                else:
+                    self.assertFalse(cell["header"])
+                    self.assertFalse(cell["is_header"])
+            self.assertEqual(grid_positions, {(r, c) for r in range(3) for c in range(2)})
+
+            # 6 text lines placed inside cells with role "PARA_LINE"
+            lines = annotation["lines"]
+            self.assertEqual(len(lines), 6)
+            for line in lines:
+                self.assertEqual(line["role"], "PARA_LINE")
+                self.assertIn(line["text"], self.texts)
+                self.assertEqual(line["scope_id"], table_id)
+
+            # Reading order matches row-major order of lines
+            self.assertEqual(annotation["reading_order"], [line["id"] for line in lines])
+
+            # Relations verification
+            relations = annotation["relations"]
+            line_to_cell_parents = [
+                rel for rel in relations
+                if rel["type"] == "PARENT" and rel["source"].startswith(f"{annotation['page_id']}:l")
+            ]
+            cell_to_table_parents = [
+                rel for rel in relations
+                if rel["type"] == "PARENT" and rel["source"].startswith(f"{annotation['page_id']}:c")
+            ]
+            right_cells = [rel for rel in relations if rel["type"] == "RIGHT_CELL"]
+
+            # Each of the 6 lines has a PARENT relation to its cell
+            self.assertEqual(len(line_to_cell_parents), 6)
+            # Each of the 6 cells has a PARENT relation to the TABLE
+            self.assertEqual(len(cell_to_table_parents), 6)
+            for rel in cell_to_table_parents:
+                self.assertEqual(rel["target"], table_id)
+
+            # RIGHT_CELL links (r, 0) -> (r, 1) for each row r in {0, 1, 2}
+            self.assertEqual(len(right_cells), 3)
+            for rel in right_cells:
+                source_cell = cell_by_id[rel["source"]]
+                target_cell = cell_by_id[rel["target"]]
+                self.assertEqual(source_cell["row"], target_cell["row"])
+                self.assertEqual(source_cell["col"], 0)
+                self.assertEqual(target_cell["col"], 1)
+
     def test_composition_is_deterministic_for_a_seed(self) -> None:
         output = self.root / "deterministic"
         first = self._compose(output)
@@ -114,6 +233,70 @@ class RecognitionCompositionTests(unittest.TestCase):
         second_rows = [row["annotation"] for row in PrismPageDataset(second["manifest"]).records]
         self.assertEqual(json.dumps(first_rows), json.dumps(second_rows))
         self.assertEqual(first["manifest_sha256"], second["manifest_sha256"])
+
+    def test_shard_fingerprint_creation_and_invalidation(self) -> None:
+        from scripts.build_real_corpus import _completed_shard, _compose_shard, _make_shard_fingerprint
+
+        shard_dir = self.root / "fingerprint_shard"
+        args = {
+            "labels": str(self.labels),
+            "output_dir": str(shard_dir),
+            "pages": 2,
+            "license": "CC-BY-4.0",
+            "permission": "local-permission",
+            "template_family": "test-family",
+            "name": "test-shard",
+            "source_class": "derived",
+            "source_dataset": "paddlex/test",
+            "seed": 42,
+            "prefix": None,
+            "page_offset": 0,
+        }
+        result = _compose_shard(args)
+        self.assertEqual(result["pages"], 2)
+        fingerprint_file = shard_dir / "shard_fingerprint.json"
+        self.assertTrue(fingerprint_file.is_file())
+        stored_fp = json.loads(fingerprint_file.read_text(encoding="utf-8"))
+        self.assertEqual(stored_fp["seed"], 42)
+        self.assertEqual(stored_fp["pages"], 2)
+        self.assertEqual(stored_fp["template_family"], "test-family")
+        self.assertIsNotNone(stored_fp["labels_sha256"])
+
+        # Cache hit with matching fingerprint
+        expected_fp = _make_shard_fingerprint(args)
+        cached = _completed_shard(shard_dir, 2, expected_fp)
+        self.assertIsNotNone(cached)
+        self.assertEqual(cached["pages"], 2)
+
+        # Cache invalidation on changed seed
+        mismatched_seed_fp = dict(expected_fp, seed=999)
+        self.assertIsNone(_completed_shard(shard_dir, 2, mismatched_seed_fp))
+
+        # Cache invalidation on changed template family
+        mismatched_family_fp = dict(expected_fp, template_family="other-family")
+        self.assertIsNone(_completed_shard(shard_dir, 2, mismatched_family_fp))
+
+        # Cache invalidation on changed labels_sha256
+        mismatched_labels_fp = dict(expected_fp, labels_sha256="0" * 64)
+        self.assertIsNone(_completed_shard(shard_dir, 2, mismatched_labels_fp))
+
+        # Cache invalidation on page count mismatch
+        self.assertIsNone(_completed_shard(shard_dir, 3, expected_fp))
+
+        # Cache invalidation on missing image file
+        manifest_rows = [
+            json.loads(line)
+            for line in (shard_dir / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        first_img = Path(manifest_rows[0]["image_path"])
+        temp_img_backup = first_img.read_bytes()
+        first_img.unlink()
+        self.assertIsNone(_completed_shard(shard_dir, 2, expected_fp))
+        first_img.write_bytes(temp_img_backup)
+
+        # Cache invalidation on missing fingerprint file
+        fingerprint_file.unlink()
+        self.assertIsNone(_completed_shard(shard_dir, 2, expected_fp))
 
     def test_rotated_crop_polygon_matches_the_pasted_pixels(self) -> None:
         crop = Image.new("RGB", (40, 12), (0, 0, 0))

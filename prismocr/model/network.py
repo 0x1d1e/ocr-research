@@ -10,6 +10,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from prismocr.data.schema import resolve_line_supervision
 from prismocr.data.vocabulary import Vocabulary
 from prismocr.matching import MatchSet, match_proposals
 from prismocr.model.backbone import PrismBackbone
@@ -116,6 +117,7 @@ class PrismOCRModel(nn.Module):
         max_cell_span: int = 32,
         strip_buckets: Sequence[int] = STRIP_BUCKETS,
         model_contract_version: int = 1,
+        fused_text_head: bool = False,
     ) -> None:
         super().__init__()
         if dim % 5:
@@ -137,9 +139,19 @@ class PrismOCRModel(nn.Module):
         self.max_table_cols = max_table_cols
         self.max_cell_span = max_cell_span
         self.strip_buckets = validate_strip_buckets(strip_buckets)
+        self.fused_text_head = bool(fused_text_head)
 
         self.backbone = PrismBackbone(dim)
-        self.text_head = TextLineHead(64, dim, len(TEXT_ROLES), model_contract_version=self.model_contract_version)
+        if self.fused_text_head:
+            self.lat16 = nn.Conv2d(dim, dim, 1, bias=False)
+            self.text_head = TextLineHead(
+                dim, dim, len(TEXT_ROLES), model_contract_version=self.model_contract_version
+            )
+        else:
+            self.lat16 = None
+            self.text_head = TextLineHead(
+                64, dim, len(TEXT_ROLES), model_contract_version=self.model_contract_version
+            )
         self.region_head = RegionQueryHead(
             dim,
             region_queries,
@@ -212,6 +224,20 @@ class PrismOCRModel(nn.Module):
         required = minimum_ctc_frames(ids)
         return next((bucket for bucket in self.strip_buckets if bucket >= required), None)
 
+    def forward_text_features(
+        self, f4: torch.Tensor, f8: torch.Tensor, f16: torch.Tensor
+    ) -> torch.Tensor:
+        if not self.fused_text_head:
+            return f4
+        p16 = self.lat16(f16)
+        p8 = self.lat8(f8) + torch.nn.functional.interpolate(
+            p16, size=f8.shape[-2:], mode="bilinear", align_corners=False
+        )
+        p4 = self.lat4(f4) + torch.nn.functional.interpolate(
+            p8, size=f4.shape[-2:], mode="bilinear", align_corners=False
+        )
+        return p4
+
     def forward(
         self,
         images: torch.Tensor,
@@ -227,7 +253,8 @@ class PrismOCRModel(nn.Module):
         text_threshold = self.text_threshold if text_threshold is None else text_threshold
         region_threshold = self.region_threshold if region_threshold is None else region_threshold
         f4, f8, f16 = self.backbone(images)
-        text_raw = self.text_head(f4)
+        text_features = self.forward_text_features(f4, f8, f16)
+        text_raw = self.text_head(text_features)
         text = TextLineHead.proposals(
             text_raw,
             max_proposals=self.text_proposals,
@@ -254,13 +281,17 @@ class PrismOCRModel(nn.Module):
             )
 
         sample_boxes = text["boxes"].clone()
-        ocr_items: list[tuple[int, int, int]] = []
+        ocr_items: list[tuple[int, int, int, torch.Tensor, torch.Tensor]] = []
         unsupported: list[tuple[int, int, str]] = []
         if targets is not None and assignments is not None:
             alpha = min(1.0, max(0.0, float(teacher_force_ratio)))
             for batch_index, match in enumerate(assignments["text"]):
+                if resolve_line_supervision(targets[batch_index]) == "unavailable":
+                    continue
                 lines = list(targets[batch_index].get("lines", ()))
+                accepted_gt_indices: set[int] = set()
                 for gt_index, proposal_index in match.accepted_pairs:
+                    accepted_gt_indices.add(gt_index)
                     gt_box = _target_box(lines[gt_index], images.device, images.dtype)
                     sample_boxes[batch_index, proposal_index] = _interpolate_teacher_box(
                         text["boxes"][batch_index, proposal_index], gt_box, alpha
@@ -285,7 +316,44 @@ class PrismOCRModel(nn.Module):
                             f"ctc_length_exceeds_{self.strip_buckets[-1]}_frames",
                         ))
                     else:
-                        ocr_items.append((batch_index, proposal_index, bucket))
+                        box = sample_boxes[batch_index, proposal_index]
+                        embedding = text["embeddings"][batch_index, proposal_index]
+                        ocr_items.append((batch_index, proposal_index, bucket, box, embedding))
+
+                # Finding 3.3: CTC recognition bootstrap / warmup path
+                # When self.training, if match.accepted_pairs has 0 accepted pairs (or when alpha > 0),
+                # include ground-truth boxes with anchor-cell embeddings in ocr_items
+                if self.training and (len(match.accepted_pairs) == 0 or alpha > 0.0):
+                    feat_h, feat_w = text_raw["feature_map"].shape[-2:]
+                    for gt_index, line in enumerate(lines):
+                        if gt_index in accepted_gt_indices:
+                            continue
+                        gt_box = _target_box(line, images.device, images.dtype)
+                        ref_id = -(gt_index + 1)
+                        transcript = str(line.get("text", ""))
+                        bucket = self._training_bucket(transcript)
+                        rejection = None
+                        if self.model_contract_version == 2:
+                            if self.vocabulary is None:
+                                raise ValueError("contract 2 training requires the actual vocabulary")
+                            encoded = self.vocabulary.encode(transcript)
+                            if encoded.oov_positions:
+                                rejection = "ctc_oov_characters"
+                            elif minimum_ctc_frames(encoded.ids) > bucket:
+                                rejection = f"requires_{minimum_ctc_frames(encoded.ids)}_frames_but_bucket_is_{bucket}"
+                        if rejection is not None:
+                            unsupported.append((batch_index, ref_id, rejection))
+                        elif bucket is None:
+                            unsupported.append((
+                                batch_index,
+                                ref_id,
+                                f"ctc_length_exceeds_{self.strip_buckets[-1]}_frames",
+                            ))
+                        else:
+                            x = min(feat_w - 1, max(0, int(float(gt_box[0]) * feat_w)))
+                            y = min(feat_h - 1, max(0, int(float(gt_box[1]) * feat_h)))
+                            embedding = text_raw["feature_map"][batch_index, :, y, x]
+                            ocr_items.append((batch_index, ref_id, bucket, gt_box, embedding))
         else:
             for batch_index in range(images.shape[0]):
                 recognition_mask = text["mask"][batch_index]
@@ -307,20 +375,21 @@ class PrismOCRModel(nn.Module):
                             f"geometry_exceeds_{self.strip_buckets[-1]}_frame_bucket",
                         ))
                     else:
-                        ocr_items.append((batch_index, proposal_index, bucket))
+                        box = text["boxes"][batch_index, proposal_index]
+                        embedding = text["embeddings"][batch_index, proposal_index]
+                        ocr_items.append((batch_index, proposal_index, bucket, box, embedding))
 
         f_glyph = self.lat4(f4) + torch.nn.functional.interpolate(
             self.lat8(f8), size=f4.shape[-2:], mode="bilinear", align_corners=False
         )
-        grouped: dict[int, list[tuple[int, int]]] = defaultdict(list)
-        for batch_index, proposal_index, bucket in ocr_items:
-            grouped[bucket].append((batch_index, proposal_index))
+        grouped: dict[int, list[tuple[int, int, torch.Tensor, torch.Tensor]]] = defaultdict(list)
+        for batch_index, proposal_index, bucket, box, embedding in ocr_items:
+            grouped[bucket].append((batch_index, proposal_index, box, embedding))
         ocr_groups: dict[int, dict[str, torch.Tensor]] = {}
-        for bucket, refs_list in grouped.items():
-            refs = torch.tensor(refs_list, device=images.device, dtype=torch.long)
-            batch_idx, proposal_idx = refs[:, 0], refs[:, 1]
-            boxes = sample_boxes[batch_idx, proposal_idx]
-            embeddings = text["embeddings"][batch_idx, proposal_idx]
+        for bucket, items in grouped.items():
+            refs = torch.tensor([[item[0], item[1]] for item in items], device=images.device, dtype=torch.long)
+            boxes = torch.stack([item[2] for item in items], dim=0)
+            embeddings = torch.stack([item[3] for item in items], dim=0)
             logits = self.recognizer.forward_bucket(f_glyph, boxes, embeddings, refs, bucket)
             ocr_groups[bucket] = {"refs": refs, "logits": logits}
 
@@ -329,6 +398,7 @@ class PrismOCRModel(nn.Module):
         graph_mask = torch.cat((text["mask"], regions["mask"]), dim=1)
         return {
             "text": text,
+            "raw_text": text_raw,
             "regions": regions,
             "text_heatmap_logits": text_raw["heatmap_logits"],
             "assignments": assignments,

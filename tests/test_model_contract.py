@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import math
 import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
 import torch
 
 from prismocr.api import PrismOCR, save_artifact
@@ -18,7 +20,17 @@ from prismocr.losses import PrismOCRLoss
 from prismocr.model.heads import TextLineHead
 from prismocr.model.network import PrismOCRModel, validated_model_state
 from prismocr.model.recognizer import choose_inference_bucket
-from prismocr.onnx_export import ONNXExportError, _load_unfused_source_model
+from prismocr.onnx_export import (
+    ONNXExportError,
+    PrismONNXRuntime,
+    _load_unfused_source_model,
+    export_artifact,
+)
+
+_HAS_ONNX_EXPORT_DEPS = all(
+    importlib.util.find_spec(name) is not None
+    for name in ("onnx", "onnxruntime")
+)
 from prismocr.train import _resolved_settings
 from scripts.overfit_heatmap import build_model
 
@@ -226,6 +238,73 @@ class ModelContractTests(unittest.TestCase):
             self.assertIs(rebuilt.vocabulary, model.vocabulary)
             checkpoint = torch.load(root / "model.pt", weights_only=True)
             rebuilt.load_state_dict(validated_model_state(checkpoint, config))
+
+    @staticmethod
+    def measure_receptive_field(
+        model: PrismOCRModel, input_shape: tuple[int, int] = (512, 1024)
+    ) -> tuple[int, int]:
+        m = copy.deepcopy(model).eval()
+        for n, p in m.named_parameters():
+            if "bn2.weight" in n:
+                torch.nn.init.ones_(p)
+        h, w = input_shape
+        x = torch.randn(1, 3, h, w, requires_grad=True)
+        out = m(x)
+        logits = out["raw_text"]["heatmap_logits"]
+        cy, cx = logits.shape[-2] // 2, logits.shape[-1] // 2
+        logits[0, 0, cy, cx].backward()
+        grad = x.grad[0]
+        grad_any = (grad != 0).any(dim=0)
+        nonzero_y, nonzero_x = torch.where(grad_any)
+        rf_h = int((nonzero_y.max() - nonzero_y.min() + 1).item())
+        rf_w = int((nonzero_x.max() - nonzero_x.min() + 1).item())
+        return rf_h, rf_w
+
+    def test_fused_text_head_receptive_field_and_inventory(self):
+        m_base = PrismOCRModel(dim=160, fused_text_head=False)
+        m_fused = PrismOCRModel(dim=160, fused_text_head=True)
+
+        rf_base_h, rf_base_w = self.measure_receptive_field(m_base)
+        self.assertEqual((rf_base_h, rf_base_w), (23, 55))
+
+        rf_fused_h, rf_fused_w = self.measure_receptive_field(m_fused)
+        self.assertGreaterEqual(rf_fused_h, 200)
+        self.assertGreaterEqual(rf_fused_w, 500)
+        self.assertGreater(rf_fused_h * rf_fused_w, 10 * (rf_base_h * rf_base_w))
+
+        # Both models stay strictly below the 10,000,000 FP32 byte inventory ceiling
+        self.assertLess(m_base.tensor_bytes(), 10_000_000)
+        self.assertLess(m_fused.tensor_bytes(), 10_000_000)
+
+    @unittest.skipUnless(_HAS_ONNX_EXPORT_DEPS, "ONNX export dependencies required")
+    def test_fused_text_head_onnx_export_and_parity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            artifact_dir = root / "pytorch"
+            export_dir = root / "onnx"
+            vocabulary = Vocabulary.from_texts(["abc"])
+            model = PrismOCRModel(
+                model_contract_version=2,
+                dim=10,
+                text_proposals=16,
+                region_queries=2,
+                vocab_size=len(vocabulary),
+                vocabulary=vocabulary,
+                text_threshold=0.0,
+                region_threshold=0.15,
+                fused_text_head=True,
+            )
+            save_artifact(artifact_dir, model, vocabulary)
+            manifest = export_artifact(
+                artifact_dir,
+                export_dir,
+                image_sizes=((16, 16), (64, 80), (96, 128)),
+            )
+            self.assertEqual(manifest["parity"]["status"], "passed")
+            self.assertEqual(manifest["parity"]["fusion_parity"]["status"], "passed")
+            runtime = PrismONNXRuntime(export_dir)
+            outputs = runtime.run_tensors(np.zeros((1, 3, 32, 48), dtype=np.float32))
+            self.assertIn("core", outputs)
 
 
 if __name__ == "__main__":

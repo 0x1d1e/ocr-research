@@ -181,11 +181,14 @@ class _CoreGraph(nn.Module):
     def __init__(self, model: PrismOCRModel) -> None:
         super().__init__()
         self.model = model
+        if getattr(model, "fused_text_head", False):
+            self.lat16 = model.lat16
 
     def forward(self, images: torch.Tensor) -> tuple[torch.Tensor, ...]:
         model = self.model
         f4, f8, f16 = model.backbone(images)
-        raw_text = model.text_head(f4)
+        text_features = model.forward_text_features(f4, f8, f16)
+        raw_text = model.text_head(text_features)
         text = model.text_head.proposals(
             raw_text,
             max_proposals=model.text_proposals,

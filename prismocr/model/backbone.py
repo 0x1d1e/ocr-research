@@ -125,6 +125,13 @@ def _batch_norm_recompute_context(module: nn.Module) -> Iterator[None]:
                     layer.num_batches_tracked.copy_(num_batches_tracked)
 
 
+def _is_autocast_enabled(device_type: str) -> bool:
+    try:
+        return torch.is_autocast_enabled(device_type)
+    except TypeError:
+        return torch.is_autocast_enabled()
+
+
 class PrismBackbone(nn.Module):
     """Return stride-4/8/16 features for glyph and structure streams."""
 
@@ -170,7 +177,7 @@ class PrismBackbone(nn.Module):
             raise ValueError("images must have shape [B, 3, H, W]")
         if images.shape[-2] % 16 or images.shape[-1] % 16:
             raise ValueError("image height and width must be multiples of backbone stride 16")
-        if torch.is_autocast_enabled(images.device.type):
+        if _is_autocast_enabled(images.device.type):
             # Keep the input stem block in FP32 under autocast. On flat/blank
             # pages the first BN can amplify gradients enough that casting its
             # input gradient back to FP16 overflows before GradScaler sees it.

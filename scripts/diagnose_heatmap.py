@@ -11,7 +11,7 @@ import torch
 from prismocr.data.dataset import PrismPageDataset, collate_pages
 from prismocr.data.vocabulary import Vocabulary
 from prismocr.losses import PrismOCRLoss
-from prismocr.model.network import PrismOCRModel
+from prismocr.model.network import PrismOCRModel, validated_model_state
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,8 +38,11 @@ def main(argv: list[str] | None = None) -> int:
         max_table_cols=config["max_table_cols"],
         max_cell_span=config["max_cell_span"],
         strip_buckets=config["strip_buckets"],
+        model_contract_version=config.get("model_contract_version", 1),
+        fused_text_head=config.get("fused_text_head", False),
     )
-    state = torch.load(artifact / "model.pt", map_location="cpu", weights_only=True)["model_state"]
+    checkpoint = torch.load(artifact / "model.pt", map_location="cpu", weights_only=True)
+    state = validated_model_state(checkpoint, config)
     model.load_state_dict(state, strict=True)
     model.to(args.device).eval()
 

@@ -220,11 +220,15 @@ def canvas_probe(engine, dataset, index: int) -> dict:
     rows = []
     for height in (full_size[1], 1024, 512):
         tensor = full if height == full_size[1] else full[:, :, :height, :min(1024, full_size[0])]
-        f4, _, _ = engine.model.backbone(tensor)
-        raw = engine.model.text_head(f4)
-        raw_box = raw["box_map"][0, :, y, x]
-        normalized_size = F.softplus(raw_box[2:4] - 2).clamp(min=1e-4)
+        f4, f8, f16 = engine.model.backbone(tensor)
+        raw = engine.model.text_head(engine.model.forward_text_features(f4, f8, f16))
         size = (tensor.shape[-1], tensor.shape[-2])
+        raw_box = raw["box_map"][0, :, y, x]
+        normalized_size = TextLineHead.decode_sizes(
+            raw_box[2:4],
+            model_contract_version=engine.model.model_contract_version,
+            image_size=size,
+        )
         rows.append({"canvas_size": list(size), "anchor_grid_xy": [x, y],
                      "heatmap_logit": float(raw["heatmap_logits"][0, 0, y, x]),
                      "raw_box": raw_box.cpu().tolist(), "predicted_size_fraction": normalized_size.cpu().tolist(),
@@ -247,8 +251,8 @@ def direct_probe(engine, dataset, index: int, oracle_cap: int, heatmap_probe: bo
     target = targets[0]
     size = (images.shape[-1], images.shape[-2])
     model = engine.model
-    f4, f8, _ = model.backbone(images)
-    raw = model.text_head(f4)
+    f4, f8, f16 = model.backbone(images)
+    raw = model.text_head(model.forward_text_features(f4, f8, f16))
     heatmap = raw["heatmap_logits"][0, 0].sigmoid().cpu()
     gh, gw = heatmap.shape
     gt_boxes = [line["box"] for line in target["lines"]]

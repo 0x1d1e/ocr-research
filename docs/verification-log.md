@@ -60,6 +60,73 @@ Regressions added in `tests/test_training_contracts.py`:
 `test_box_loss_penalizes_size_ratios_symmetrically`. `python -m prismocr.verify` then runs
 `Ran 231 tests ... OK`. This is a supervision/optimization fix, not evidence of OCR quality.
 
+## 2026-10-16 — review findings verification & test suite expansion (281 tests, synthetic CLI smoke)
+
+Ran full deterministic test suite with OpenMP thread bounding:
+`OMP_NUM_THREADS=12 python -m prismocr.verify` — `Ran 281 tests in 12.542s ... OK` (Python 3.12, CPU).
+
+### Fixed review findings and regression coverage
+
+| Finding | Description & Fix | Regression / Test |
+| --- | --- | --- |
+| **Finding 3.4** | EXIF orientation in `PrismOCR._tensor_image`: images loaded via PIL are transposed to the displayed frame via `exif_oriented(image)` so orientation tags (e.g. tag 6, 90° CCW) do not transpose inference dimensions or bounding boxes. | `PublicInferenceIntegrationTests.test_exif_orientation_tag_6_transposes_to_displayed_frame` |
+| **Finding 3.16** | Model Contract v2 alignment for diagnostic scripts: `scripts/diagnose_heatmap.py` passes `model_contract_version` from config and validates model state via `validated_model_state`; `scripts/diagnose_ocr.py` uses `TextLineHead.decode_sizes` with `model_contract_version` and image dimensions. | Diagnostic scripts (`scripts/diagnose_heatmap.py`, `scripts/diagnose_ocr.py`) aligned with contract v2 |
+| **Finding 3.15** | Safe `_is_autocast_enabled` fallback across PyTorch versions: catches `TypeError` when `torch.is_autocast_enabled(device_type)` is not supported and falls back to zero-argument `torch.is_autocast_enabled()`. | Safe fallback in `prismocr/model/backbone.py` exercised across AMP paths |
+| **Finding 3.2** | Direct GT anchor-cell box and role supervision: when proposal scores are zero or during early training, target box regression and role classification loss backpropagate directly through feature map anchor cells rather than dropping supervision. | `TrainingContractTests.test_anchor_cell_supervision_produces_gradients_when_proposal_scores_are_zero` |
+| **Finding 3.3** | CTC recognition bootstrap on untrained proposals using anchor-cell embeddings: when accepted proposals are empty (or teacher forcing is active), ground-truth lines are assigned anchor-cell embeddings so the recognizer receives gradient and trains CTC weights before detector convergence. | `TrainingContractTests.test_ctc_loss_bootstrap_backpropagates_to_recognizer_when_accepted_proposals_empty` |
+| **Finding 3.6** | Learning rate warmup & cosine decay scheduler, plus threshold-free validation detection metrics / tie-breaking: added linear warmup and cosine annealing via `LambdaLR` logged to `training-log.jsonl`; checkpoint selection uses threshold-free proposal metrics (`mean_proposal_iou` / `proposal_ap_50`) to advance and break ties when detector peaks remain below operating threshold. | `TrainingLifecycleTests.test_learning_rate_warmup_and_cosine_decay_in_training_log`, `CheckpointSelectionTests.test_threshold_free_proposal_metric_selects_best_checkpoint_when_peaks_below_threshold` |
+
+### End-to-end synthetic CLI smoke run (CPU)
+
+Ran all CLI entry points end to end on generated synthetic manifests (`prismocr.data.synthetic.generate_synthetic_dataset`, DejaVu font, tiny config: `dim=20`, 8 text proposals, buckets `[8,16]`), two training pages plus one held-out validation page:
+
+- `python -m prismocr.train --manifest <train> --output <dir> --config <cfg> --validation-manifest <val>`: trained 1 epoch, verified warmup and cosine decay scheduling, computed threshold-free validation metrics, and wrote `model.pt`, `vocab-v4.json`, `model-config.json`, `manifest.json`, `training-state.pt`, `training-log.jsonl`, `training-run.json`.
+- `python -m prismocr.onnx_export --artifact <dir> --output <onnx_dir>`: exported `core.onnx`, `recognizer-8.onnx`, `recognizer-16.onnx`, `model-weights.bin`, `vocab-v4.json`, and verified numeric parity (`parity.status = "passed"`).
+- `python -m prismocr.eval --manifest <val> --artifact <dir>`: successfully evaluated held-out synthetic page with zero inference failures (`inference_failure_count = 0`), reporting honest unvalidated metrics (`status = "measured_on_supplied_manifest_not_release_validation"`).
+- `python -m prismocr.benchmark --manifest <val> --artifact <dir>`: ran representative workloads, reported parameter sizes and process memory, and exited 2 with `status = "incomplete_workload_or_failed_inference"` due to expected unrepresented workload buckets on single-page manifest.
+
+## 2026-10-16 — Phase 2 & Phase 3 verification: fused text head, corpus caching, lineage & supervision (287 tests)
+
+Ran full deterministic verification suite under 12-core CPU bounding:
+`OMP_NUM_THREADS=12 python -m prismocr.verify` — `Ran 287 tests in ~18.5s ... OK` (Python 3.12, CPU).
+
+### Verified Phase 2 / Phase 3 implementations and review findings
+
+| Finding / Topic | Implementation details & Verification | Regression / Test |
+| --- | --- | --- |
+| **Finding 3.1** | **Fused text head**: Added configurable top-down multiscale lateral feature fusion (`fused_text_head: bool = False`) in `PrismOCRModel`. Lateral 1x1 convolutions and bilinear upsampling fuse deep semantic features from `f16` (stride 16) and `f8` (stride 8) into the high-resolution `f4` (stride 4) text feature map before the line head. Empirically expands text-head effective receptive field from 23x55 px to 239x559 px (>100x receptive area expansion), providing broad horizontal context for long text lines. FP32 parameter byte inventory strictly maintains the <10MB ceiling (9,885,052 bytes / 9.88MB vs 10,000,000-byte cap). Full ONNX export and runtime numeric parity pass across all recognizer sequence buckets (`recognizer-8`, `recognizer-16`, etc.) and variable image sizes. | `ModelContractTests.test_fused_text_head_receptive_field_and_inventory`, `ModelContractTests.test_fused_text_head_onnx_export_and_parity` |
+| **Finding 3.9** | **Stale corpus cache elimination**: In `scripts/build_real_corpus.py`, `_completed_shard` validates existing shards against `shard_fingerprint.json` tracking 12 configuration facets (`labels`, `labels_sha256`, `pages`, `license`, `permission`, `template_family`, `name`, `source_class`, `source_dataset`, `seed`, `prefix`, `page_offset`). Upstream KhmerST and DocLayNet conversion manifests similarly record `.meta.json` sidecars (`input_file_sha256`, `seed`, `split`, `limit`), preventing stale cached shards from surviving changes to source annotations, seeds, or build limits. | `RecognitionCompositionTests.test_shard_fingerprint_creation_and_invalidation` |
+| **Finding 3.8** | **Source crop lineage & split disjointness**: In `compose_recognition_pages` (`prismocr/data/real_corpus.py`), composed lines record explicit crop lineage via `source_crop_id` and `source_crop_hash`. `_group_records` performs transitive union-find grouping over document IDs, template families, image SHA-256 digests, and source crop IDs/hashes. `_split_membership` asserts strict cross-split disjointness, raising `ValueError` if any source crop or group spans multiple splits. `write_split_report` audits and records exact transcript and character 3-gram Jaccard overlap between splits. | `DataToolsTests.test_source_crop_grouping_and_split_disjointness`, `DataToolsTests.test_split_report_transcript_and_ngram_overlap` |
+| **Finding 3.18** | **SPDX compliance & dataset provenance**: Governed metadata compliance standardized across corpus tooling: SPDX-compliant license naming (`NOASSERTION` for proprietary/unasserted local synthetic generators, `Apache-2.0`, `CDLA-Permissive-1.0`), hierarchical source dataset provenance paths in `source_dataset` (e.g. `paddlex_rec_dataset/<shard>`), and explicit `automated:` reviewer prefixes (`automated:prismocr-corpus-build`, `automated:KhmerST_annotation_release`, `automated:DocLayNet_annotation_release`). | Manifest schema and provenance validation in `scripts/build_real_corpus.py` and `prismocr/data/real_corpus.py` |
+| **Finding 3.5** | **GT PARENT relation supervision**: `compose_recognition_pages` groups placed text lines into paragraph/block regions when vertical line spacing exceeds threshold (12px), creating schema-valid container `REGION` annotations with verified geometric containment. Emits ground-truth `PARENT` relations (`line -> region`), providing dense, geometrically verified supervision for the structural graph head. | `RecognitionCompositionTests.test_composed_pages_keep_crop_geometry_transcripts_and_provenance` |
+| **Finding 3.16 follow-up** | **Diagnostic text feature routing**: In `scripts/diagnose_ocr.py`, `_probe_direct` and `_probe_canvas` route backbone features through `model.forward_text_features(f4, f8, f16)` prior to calling `model.text_head`, ensuring seamless diagnostic evaluation for both fused (`fused_text_head=True`) and unfused (`fused_text_head=False`) text head configurations. | `DiagnosisTests.test_direct_and_canvas_probe_support_both_fused_and_unfused_text_head` |
+
+## 2026-10-16 — Phase 3 follow-up verification: decision-normalized losses, OOV accounting, table composition, CI & pinned dependencies (290 tests)
+
+Ran full deterministic verification suite under 12-core CPU bounding:
+`OMP_NUM_THREADS=12 python -m prismocr.verify` — `Ran 290 tests in 20.2s ... OK` (Python 3.12, CPU).
+
+### Verified review findings and regression coverage
+
+| Finding / Topic | Implementation details & Verification | Regression / Test |
+| --- | --- | --- |
+| **Finding 3.12** | **Role and graph loss normalized by instance decisions**: `PrismOCRLoss` normalizes role and graph loss by instance decisions rather than page count or batch size. Role loss collects individual cross-entropy terms per supervised line role into `role_terms` and calculates the mean across supervised line roles (`torch.stack(role_terms).mean() if role_terms else zero`). Graph loss collects cross-entropy terms across valid candidate relations into `graph_terms` and calculates the mean across supervised candidate relations (`torch.stack(graph_terms).mean() if graph_terms else zero`). This prevents loss dilution in sparse batches or batches with variable line and relation counts. | `TrainingContractTests.test_role_and_graph_loss_normalized_by_decisions_not_batch_size` |
+| **Finding 3.11** | **Separate OOV accounting**: `PrismOCRLoss` separates line-level drop reporting from codepoint counts: `rejected_oov_line_count` tracks lines dropped from CTC training due to out-of-vocabulary codepoints (`ctc_oov_characters` in `outputs["ocr_unsupported"]`), while `oov_character_count` tracks total OOV codepoint occurrences across all ground-truth line texts. This keeps dropped text line counts distinct from character-level vocabulary mismatches. | `TrainingContractTests.test_oov_accounting_tracks_rejected_lines_and_character_counts` |
+| **Finding 3.5** | **Synthetic table generator (`compose_table_pages`)**: Implemented `compose_table_pages` in `prismocr/data/real_corpus.py` to synthesize table layouts providing exact table regions (`kind: TABLE`), grid cells (`row_index`, `col_index`, `row_span`, `col_span`), line-to-cell and cell-to-table `PARENT` relations, and `RIGHT_CELL` affinities, fully validated against schema v4.0 (`validate_annotation`). | `RecognitionCompositionTests.test_compose_table_pages_generates_valid_table_grid_and_relations` |
+| **Findings 3.15 & 3.19** | **Pinned dependencies & automated CI workflow**: Added `requirements-lock.txt` with pinned deployment dependencies (`torch==2.4.1`, `numpy==1.26.4`, `Pillow==10.4.0`, `onnx==1.17.0`, `onnxruntime==1.19.2`). Added `.github/workflows/ci.yml` configuring automated CI unit testing on Python 3.11 under bounded threads (`TORCH_NUM_THREADS=2`, `OMP_NUM_THREADS=2`, `MKL_NUM_THREADS=2`, `OPENBLAS_NUM_THREADS=2`) to prevent CPU thread oversubscription. | Pinned environment files: `requirements-lock.txt`, `.github/workflows/ci.yml` |
+
+## 2026-10-16 — matching optimization, project milestone delineation & test suite re-verification (290 tests)
+
+Ran full deterministic verification suite under 12-core CPU bounding:
+`OMP_NUM_THREADS=12 python -m prismocr.verify` — `Ran 290 tests in ~20.6s ... OK` (Python 3.12, CPU).
+
+### Verified review findings and regression coverage
+
+| Finding / Topic | Implementation details & Verification | Regression / Test |
+| --- | --- | --- |
+| **Finding 3.20** | **Proposal matching AABB precomputation & zero-overlap bypass**: Proposal matching (`prismocr/matching.py`) optimization precomputes rotated box polygon vertices, areas, and axis-aligned bounding boxes (AABBs) for ground-truth and candidate proposals. An early zero-overlap bypass checks disjoint AABB extents (`gt_max_x < pred_min_x or pred_max_x < gt_min_x or gt_max_y < pred_min_y or pred_max_y < gt_min_y`) to assign 0.0 IoU immediately, avoiding redundant Sutherland-Hodgman polygon clipping while preserving exact mathematical IoU equivalence. | `GeometryAndMatchingTests.test_aspect_aware_box_and_iou`, `GeometryAndMatchingTests.test_assignment_coverage_is_not_detection_recall` |
+| **Finding 3.21** | **Explicit project milestone delineation across documentation**: Standardized explicit project milestone delineation across documentation (`docs/implementation-status.md`, `README.md`): Milestone 1: `Corpus Built`, Milestone 2: `Labels QA'd`, Milestone 3: `Model Trained`, and Milestone 4: `Model Validated`. Formally decouples software-path verification from certified training data and physical deployment benchmarking. | Documentation alignment in `docs/implementation-status.md` and `README.md` |
+
 ## Standing blockers
 
 Real-corpus calibration reliability, convergence, CPU/GPU latency, and PyTorch/ONNX parity on a trained artifact all require a permissioned Khmer/English manifest and pinned target hardware. None were available in this project or standard local data roots (`/mnt/data`, `/data`, `/home/kosal/datasets`). Do not mark the corresponding spec gates satisfied from the tests above.

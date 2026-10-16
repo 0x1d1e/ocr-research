@@ -90,6 +90,16 @@ class CheckpointSelectionTests(unittest.TestCase):
     def test_selection_policy_documents_failure_ordering(self) -> None:
         self.assertIn("inference_failure_count", SELECTION_POLICY)
 
+    def test_threshold_free_proposal_metric_selects_best_checkpoint_when_peaks_below_threshold(self) -> None:
+        # When detector peaks are below 0.55 operating threshold, line recall is 0.0 and CER is 1.0 (empty hyp).
+        # Checkpoint selection should advance based on mean proposal IoU to ground truth.
+        epoch1 = {**self._metrics(recall=0.0, cer=1.0), "mean_proposal_iou": 0.12}
+        epoch2 = {**self._metrics(recall=0.0, cer=1.0), "mean_proposal_iou": 0.45}
+        self.assertTrue(_is_better(epoch2, epoch1))
+        self.assertFalse(_is_better(epoch1, epoch2))
+        # Exact tie keeps earliest epoch
+        self.assertFalse(_is_better(epoch2, epoch2))
+
 
 class TrainingLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -109,7 +119,7 @@ class TrainingLifecycleTests(unittest.TestCase):
         self.temporary.cleanup()
 
     @staticmethod
-    def _write_config(path: Path, *, learning_rate: float = 0.01) -> None:
+    def _write_config(path: Path, *, learning_rate: float = 0.01, lr_warmup_steps: int = 0) -> None:
         path.write_text(
             """[model]
             dim = 10
@@ -130,9 +140,10 @@ class TrainingLifecycleTests(unittest.TestCase):
             batch_size = 1
             num_workers = 0
             learning_rate = LEARNING_RATE
+            lr_warmup_steps = LR_WARMUP_STEPS
             weight_decay = 0.0
             max_grad_norm = 5.0
-            """.replace("LEARNING_RATE", repr(learning_rate)),
+            """.replace("LEARNING_RATE", repr(learning_rate)).replace("LR_WARMUP_STEPS", repr(lr_warmup_steps)),
             encoding="utf-8",
         )
 
@@ -599,6 +610,21 @@ class TrainingLifecycleTests(unittest.TestCase):
             checkpoint["best_model_state"]["weight"],
         )
         self.assertFalse(torch.equal(artifact["model_state"]["weight"], checkpoint["model_state"]["weight"]))
+
+    def test_learning_rate_warmup_and_cosine_decay_in_training_log(self) -> None:
+        manifest = self._manifest("warmup-data", ("a", "b"))
+        output = self.root / "warmup-output"
+        self._write_config(self.config, learning_rate=0.01, lr_warmup_steps=2)
+        result = self._train(manifest, output, epochs=4)
+        self.assertEqual(result["epochs"], 4)
+        log_lines = (output / "training-log.jsonl").read_text().splitlines()
+        rows = [json.loads(line) for line in log_lines if "learning_rate" in json.loads(line)]
+        self.assertGreaterEqual(len(rows), 4)
+        lrs = [row["learning_rate"] for row in rows]
+        # Step 1 -> step 2 is warming up
+        self.assertLess(lrs[0], lrs[1])
+        # Later steps decay
+        self.assertGreater(lrs[1], lrs[-1])
 
 
 if __name__ == "__main__":

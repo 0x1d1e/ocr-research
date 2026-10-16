@@ -561,6 +561,161 @@ class TrainingContractTests(unittest.TestCase):
             places=6,
         )
 
+    def test_anchor_cell_supervision_produces_gradients_when_proposal_scores_are_zero(self) -> None:
+        vocabulary = Vocabulary.from_texts(["a"], max_size=8)
+        model = PrismOCRModel(
+            dim=10, text_proposals=4, region_queries=2, vocab_size=len(vocabulary), vocabulary=vocabulary
+        ).train()
+        line = {"id": "line-1", "box": _box(0.5, 0.5, 0.2, 0.1), "text": "a", "role": "TITLE"}
+        target = {"page_id": "doc:1", "lines": [line], "regions": [], "cells": [], "relations": []}
+        outputs = model(torch.randn((1, 3, 32, 32)), [target], teacher_force_ratio=0.0)
+
+        # Force all proposal scores to 0
+        outputs["text"]["scores"].zero_()
+        losses = PrismOCRLoss(vocabulary)(outputs, [target])
+        self.assertGreater(float(losses["box"].detach()), 0.0)
+        self.assertGreater(float(losses["role"].detach()), 0.0)
+
+        model.zero_grad()
+        losses["box"].backward(retain_graph=True)
+        self.assertIsNotNone(model.text_head.box.weight.grad)
+        self.assertGreater(float(model.text_head.box.weight.grad.abs().sum()), 0.0)
+
+        model.zero_grad()
+        losses["role"].backward()
+        self.assertIsNotNone(model.text_head.role.weight.grad)
+        self.assertGreater(float(model.text_head.role.weight.grad.abs().sum()), 0.0)
+
+    def test_ctc_loss_bootstrap_backpropagates_to_recognizer_when_accepted_proposals_empty(self) -> None:
+        vocabulary = Vocabulary.from_texts(["a"], max_size=8)
+        model = PrismOCRModel(
+            dim=10, text_proposals=4, region_queries=2, vocab_size=len(vocabulary), vocabulary=vocabulary
+        ).train()
+        line = {"id": "line-1", "box": _box(0.5, 0.5, 0.2, 0.1), "text": "a", "role": "TITLE"}
+        target = {"page_id": "doc:1", "lines": [line], "regions": [], "cells": [], "relations": []}
+        outputs = model(torch.randn((1, 3, 32, 32)), [target], teacher_force_ratio=0.0)
+
+        # In a random initialization without trained proposals, accepted_pairs is empty,
+        # but the bootstrap path populates ocr_groups using anchor-cell embeddings.
+        self.assertEqual(len(outputs["assignments"]["text"][0].accepted_pairs), 0)
+        self.assertGreater(len(outputs["ocr_groups"]), 0)
+
+        losses = PrismOCRLoss(vocabulary)(outputs, [target])
+        self.assertGreater(float(losses["ctc"].detach()), 0.0)
+
+        model.zero_grad()
+        losses["ctc"].backward()
+        self.assertIsNotNone(model.recognizer.classifier.weight.grad)
+        self.assertGreater(float(model.recognizer.classifier.weight.grad.abs().sum()), 0.0)
+
+    def test_role_and_graph_loss_normalized_by_decisions_not_batch_size(self) -> None:
+        vocabulary = Vocabulary.from_texts(["a", "b"], max_size=8)
+        line_a = {"id": "line-a", "box": _box(0.2, 0.5, 0.2, 0.1), "text": "a", "role": "KEY"}
+        line_b = {"id": "line-b", "box": _box(0.6, 0.5, 0.2, 0.1), "text": "b", "role": "VALUE"}
+
+        # Target 0 has 2 lines and 1 relation decision; Target 1 has 0 lines and 0 relations.
+        target_0 = {
+            "page_id": "doc:page-0",
+            "lines": [line_a, line_b],
+            "regions": [],
+            "cells": [],
+            "relations": [{"type": "NEXT", "source": "line-a", "target": "line-b"}],
+        }
+        target_1 = {
+            "page_id": "doc:page-1",
+            "lines": [],
+            "regions": [],
+            "cells": [],
+            "relations": [],
+        }
+
+        # Build a 2-page batch
+        match_0 = _matched([line_a["box"], line_b["box"]], [line_a, line_b])
+        match_1 = _matched([], [])
+        match_regions_0 = _matched([], [])
+        match_regions_1 = _matched([], [])
+
+        role_logits = torch.randn((2, 2, len(TEXT_ROLE_TO_ID)), requires_grad=True)
+        # Graph logits: 2 pages, 5 relations, 4 nodes, 5 target slots
+        graph_logits = torch.randn((2, len(RELATION_NAMES), 4, 5), requires_grad=True)
+
+        outputs = {
+            "text_heatmap_logits": torch.zeros((2, 1, 4, 4), requires_grad=True),
+            "text": {
+                "boxes": torch.zeros((2, 2, 6)),
+                "role_logits": role_logits,
+            },
+            "regions": {
+                "boxes": torch.zeros((2, 0, 6)),
+                "class_logits": torch.zeros((2, 0, len(REGION_KIND_TO_ID))),
+                "row_logits": torch.zeros((2, 0, 128)),
+                "col_logits": torch.zeros((2, 0, 128)),
+                "rowspan_logits": torch.zeros((2, 0, 32)),
+                "colspan_logits": torch.zeros((2, 0, 32)),
+                "header_logits": torch.zeros((2, 0)),
+            },
+            "assignments": {
+                "text": (match_0, match_1),
+                "regions": (match_regions_0, match_regions_1),
+            },
+            "graph_logits": graph_logits,
+            "ocr_groups": {},
+            "ocr_unsupported": (),
+        }
+
+        criterion = PrismOCRLoss(vocabulary)
+        losses = criterion(outputs, [target_0, target_1])
+
+        # Expected role loss: mean over 2 supervised lines (not divided by batch_size 2 or available pages 2)
+        expected_role_term_0 = torch.nn.functional.cross_entropy(
+            role_logits[0, 0:1], torch.tensor([TEXT_ROLE_TO_ID["KEY"]])
+        )
+        expected_role_term_1 = torch.nn.functional.cross_entropy(
+            role_logits[0, 1:2], torch.tensor([TEXT_ROLE_TO_ID["VALUE"]])
+        )
+        expected_role_loss = (expected_role_term_0 + expected_role_term_1) / 2.0
+        self.assertAlmostEqual(float(losses["role"].detach()), float(expected_role_loss.detach()), places=5)
+
+        # Expected graph loss: exactly 1 supervised relation decision on page 0.
+        # It must normalize by 1 (the number of relation decisions), NOT by batch_size 2!
+        rel_logits = graph_logits[0, RELATION_NAMES.index("NEXT"), 0].clone()
+        valid = torch.zeros(5, dtype=torch.bool)
+        valid[1] = True   # line-b
+        valid[4] = True   # NULL
+        rel_logits = rel_logits.masked_fill(~valid, float("-inf"))
+        expected_graph_loss = torch.nn.functional.cross_entropy(
+            rel_logits[None], torch.tensor([1])
+        )
+        self.assertAlmostEqual(float(losses["graph"].detach()), float(expected_graph_loss.detach()), places=5)
+
+    def test_oov_accounting_tracks_rejected_lines_and_character_counts(self) -> None:
+        vocabulary = Vocabulary.from_texts(["hello", "world"], max_size=16)
+        # Vocabulary only contains characters from "hello", "world".
+        # Characters '!' and '@' and '#' are OOV.
+        lines = [
+            {"id": "line-1", "box": _box(0.2, 0.5, 0.2, 0.1), "text": "hello!@", "role": "TITLE"},
+            {"id": "line-2", "box": _box(0.5, 0.5, 0.2, 0.1), "text": "world#", "role": "PARA_LINE"},
+        ]
+        target = {
+            "page_id": "doc:oov",
+            "lines": lines,
+            "regions": [],
+            "cells": [],
+            "relations": [],
+        }
+        outputs = self._outputs(vocabulary, lines, [])
+        outputs["ocr_unsupported"] = (
+            (0, 0, "ctc_oov_characters"),
+            (0, 1, "requires_10_frames_but_bucket_is_8"),
+            (0, 2, "ctc_oov_characters"),
+        )
+
+        losses = PrismOCRLoss(vocabulary)(outputs, [target])
+        # Two lines were rejected specifically with reason "ctc_oov_characters"
+        self.assertEqual(losses["rejected_oov_line_count"], 2)
+        # Across line-1 ("hello!@" -> 2 OOV) and line-2 ("world#" -> 1 OOV)
+        self.assertEqual(losses["oov_character_count"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
