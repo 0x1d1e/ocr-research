@@ -1,0 +1,42 @@
+[model]
+model_contract_version = 2
+dim = 160
+max_table_rows = 128
+max_table_cols = 128
+max_cell_span = 32
+text_proposals = 128
+region_queries = 64
+strip_height = 5
+strip_buckets = [64, 128, 160, 256]
+vocabulary_size = 512
+recognizer = "transformer"
+text_threshold = 0.55
+region_threshold = 0.5
+
+[training]
+seed = 42
+teacher_forcing_start = 1.0
+teacher_forcing_end = 0.0
+strict_ctc_length = true
+epochs = 1
+batch_size = 1
+num_workers = 0
+learning_rate = 0.0001
+weight_decay = 0.0001
+max_grad_norm = 5.0
+gradient_accumulation_steps = 1
+amp = false
+amp_dtype = "float16"
+activation_checkpointing = false
+
+[training.loss_weights]
+heatmap = 1.0
+role = 1.0
+region = 1.0
+box = 1.0
+ctc = 1.0
+graph = 1.0
+grid = 1.0
+
+[limits]
+fp32_tensor_bytes = 10000000

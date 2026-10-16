@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prismocr"
+version = "0.1.0"
+description = "Research implementation of the PrismOCR v4 engineering contract"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["torch>=2.2", "numpy>=1.26", "Pillow>=10"]
+
+[project.optional-dependencies]
+export = ["onnx==1.17.0", "onnxruntime==1.24.3"]
+
+[project.scripts]
+prismocr-train = "prismocr.train:main"
+prismocr-eval = "prismocr.eval:main"
+prismocr-benchmark = "prismocr.benchmark:main"
+prismocr-calibrate = "prismocr.calibration:main"
+prismocr-verify = "prismocr.verify:main"
+prismocr-export = "prismocr.onnx_export:main"
+prismocr-data = "prismocr.data.tools:main"
+
+[tool.setuptools.packages.find]
+include = ["prismocr*"]

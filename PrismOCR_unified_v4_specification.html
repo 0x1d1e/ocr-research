@@ -1,0 +1,2667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<meta content="dark light" name="color-scheme"/>
+<meta content="Unified, offline PrismOCR engineering specification: v4 authoritative requirements, integrated decisions and complete v3/v3.1 technical reference, implementation, audits and compute calculator." name="description"/>
+<title>PrismOCR — Unified Engineering Specification | v4 + v3.1 Reference</title>
+<style>
+    :root{--bg:#0c1017;--nav:#101620;--panel:#141b26;--panel2:#1b2432;--text:#e8ecf2;--muted:#9daabc;--faint:#748196;--border:#303a49;--blue:#8cb8ff;--mint:#81d8bf;--amber:#f3cb82;--pink:#e9a9bd;--red:#f3a7aa;--code:#0a0e14;--stripe:rgba(149,174,210,.065);--shadow:0 12px 45px rgba(0,0,0,.18)}
+    :root[data-theme="light"]{--bg:#f6f8fb;--nav:#fff;--panel:#fff;--panel2:#edf2f9;--text:#17202b;--muted:#49586b;--faint:#66758a;--border:#dce3ed;--blue:#2458a7;--mint:#176e57;--amber:#82530b;--pink:#8b3853;--red:#b3383d;--code:#edf2f8;--stripe:rgba(60,80,118,.035);--shadow:0 10px 36px rgba(45,65,98,.10)}
+    *{box-sizing:border-box} html{scroll-behavior:smooth;scroll-padding-top:28px} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.72 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline} button,input{font:inherit} button{cursor:pointer} ::selection{background:#668bc16e}
+    #progress{position:fixed;inset:0 auto auto 0;height:3px;background:var(--mint);width:0;z-index:100;transition:width .07s linear}
+    .shell{display:grid;grid-template-columns:272px minmax(0,980px);justify-content:center;gap:64px;margin:0 auto;max-width:1510px;padding:0 42px 96px}
+    aside{position:sticky;top:0;height:100vh;overflow:auto;padding:29px 12px 30px 2px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+    .brand{display:flex;gap:12px;align-items:center;margin:3px 0 25px;color:var(--text);font-weight:800;letter-spacing:-.02em}
+    .mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;color:#0b1823;background:var(--mint);font-weight:900;font-size:20px}
+    .brand small{font-weight:500;display:block;color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-top:-5px}
+    .navsearch{width:100%;background:var(--panel);border:1px solid var(--border);padding:10px 12px;border-radius:9px;color:var(--text);outline:0;font-size:13px;margin-bottom:18px}
+    .navsearch:focus{border-color:var(--blue)}.navcat{font-size:10px;letter-spacing:.15em;color:var(--faint);text-transform:uppercase;margin:20px 12px 8px;font-weight:800}
+    .navlink{display:block;font-size:12.5px;line-height:1.35;color:var(--muted);border-left:2px solid transparent;padding:8px 10px;margin:1px 0;border-radius:0 7px 7px 0}
+    .navlink:hover{color:var(--text);text-decoration:none;background:var(--panel2)}.navlink.active{color:var(--mint);background:var(--panel);border-left-color:var(--mint)}
+    .sidefoot{border-top:1px solid var(--border);margin-top:23px;padding:15px 11px;color:var(--faint);font-size:11px;line-height:1.7}
+    main{min-width:0;padding-top:60px}.actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:32px}.chipbtn{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:6px 11px;border-radius:7px;font-size:12px}.chipbtn:hover{border-color:var(--muted);color:var(--text)}
+    .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:var(--mint)}h1{font-size:clamp(40px,6vw,71px);letter-spacing:-.059em;line-height:1.04;margin:18px 0 16px;font-weight:780}h1 em{font-style:normal;color:var(--mint)}
+    .lead{font-size:19px;color:var(--muted);line-height:1.7;max-width:790px;margin:0 0 29px}.metadata{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 39px}.pill{padding:5px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.02em}
+    .hero-divider{height:1px;background:linear-gradient(90deg,var(--mint),var(--border) 52%,transparent);margin-bottom:30px}
+    .overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0 24px}.metric{padding:19px;border:1px solid var(--border);border-radius:11px;background:var(--panel)}.metric span{display:block;color:var(--muted);font-size:11px;margin-bottom:8px}.metric strong{display:block;font-size:20px;letter-spacing:-.03em}.metric small{display:block;color:var(--faint);font-size:10px;margin-top:6px}
+    section{padding-top:42px;margin-top:32px;border-top:1px solid var(--border);scroll-margin-top:18px}section:first-of-type{border-top:0;margin-top:0}.sec-id{color:var(--mint);letter-spacing:.15em;font-size:11px;text-transform:uppercase;font-weight:800}.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:20px}
+    h2{letter-spacing:-.039em;font-size:32px;line-height:1.22;margin:10px 0 15px}h3{font-size:19px;line-height:1.36;letter-spacing:-.015em;margin:31px 0 10px}h4{font-size:14px;margin:21px 0 8px}p{margin:10px 0 16px}strong{font-weight:700}ul,ol{padding-left:24px;margin:10px 0 19px}li{margin:5px 0}li::marker{color:var(--faint)}hr{border:0;border-top:1px solid var(--border);margin:25px 0}
+    .summary{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--mint);border-radius:10px;padding:18px 20px;margin:20px 0 24px}.summary h3,.note h3{margin:0 0 5px;font-size:15px}.summary p:last-child,.note p:last-child{margin-bottom:0}
+    .note{border:1px solid var(--border);background:var(--panel);border-radius:10px;padding:17px 20px;margin:18px 0}.note.warn{border-left:3px solid var(--amber)}.note.stop{border-left:3px solid var(--red)}.note.info{border-left:3px solid var(--blue)}.note.good{border-left:3px solid var(--mint)}
+    .tag{font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.075em;white-space:nowrap}.tag.p0{color:var(--red)}.tag.p1{color:var(--amber)}.tag.spec{color:var(--blue)}.tag.keep{color:var(--mint)}
+    .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin:18px 0 23px;scrollbar-width:thin}table{width:100%;border-collapse:collapse;font-size:13px;line-height:1.55}th{text-align:left;color:var(--muted);font-size:11px;letter-spacing:.025em;background:var(--panel2);font-weight:760}th,td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}tr:last-child>td{border-bottom:0}tbody tr:nth-child(even){background:var(--stripe)}td:first-child{font-weight:620}td code{font-size:11px}
+    code,pre,kbd{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}code{background:var(--panel2);border-radius:4px;padding:2px 5px;font-size:.84em}pre{overflow:auto;padding:18px 20px;background:var(--code);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:12px;line-height:1.72;margin:17px 0 22px;tab-size:2}pre code{font-size:inherit;background:none;padding:0}.eq{margin:16px 0;padding:15px 20px;font:13px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;background:var(--panel);border-left:2px solid var(--blue);overflow:auto}
+    .diagram{background:var(--panel);padding:27px;border:1px solid var(--border);border-radius:12px;margin:24px 0}.diagram .block{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:13px 16px;text-align:center;font-weight:700;font-size:13px}.diagram .block b{font-size:12px;font-weight:770}.diagram .block small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:4px;line-height:1.45}.diagram .arrow{color:var(--faint);font-size:21px;text-align:center;line-height:1.6}.diagram .pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.diagram .tier{display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px}.diagram .accent{border-color:var(--mint)}.diagram .blue{border-color:var(--blue)}
+    .checklist{list-style:none;padding:0}.checklist li{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:10px}.checklist li:before{content:'□';color:var(--mint);font-size:17px;line-height:1.3}.numberline{font-family:ui-monospace,monospace;font-size:11px;color:var(--faint)}
+    .columns{display:grid;grid-template-columns:1fr 1fr;gap:17px}.mini{border:1px solid var(--border);border-radius:9px;padding:17px 18px;background:var(--panel)}.mini h3{margin:0 0 7px;font-size:15px}.mini ul{margin-bottom:0}
+    details{border:1px solid var(--border);border-radius:9px;margin:12px 0;background:var(--panel)}summary{padding:14px 18px;font-weight:700;cursor:pointer}details>div{padding:0 19px 15px}details[open]>summary{border-bottom:1px solid var(--border);margin-bottom:12px}
+    .footnotes{font-size:12px;color:var(--muted)}.callout-label{display:inline-block;font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--mint);margin-bottom:3px}
+    .endcap{text-align:center;border-top:1px solid var(--border);margin-top:66px;padding:35px 0;color:var(--faint);font-size:12px}
+    .mobile-toc{display:none}
+    @media(max-width:1150px){.shell{gap:28px;grid-template-columns:235px minmax(0,1fr);padding:0 26px 70px}.overview{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:780px){.shell{display:block;padding:0 20px 56px}.desktop-aside{display:none}main{padding-top:19px}.mobile-toc{display:block;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:20px}.mobile-toc summary{padding:3px;font-size:13px}.mobile-toc .navlink{font-size:13px}.actions{margin-bottom:26px}.overview{grid-template-columns:repeat(2,1fr)}.diagram .tier{grid-template-columns:1fr}.diagram .pair{gap:9px}.columns{grid-template-columns:1fr}h2{font-size:27px}section{padding-top:30px;margin-top:23px}.lead{font-size:16px}.sec-head{display:block}}
+    @media(max-width:420px){.overview{grid-template-columns:1fr 1fr}.metric{padding:13px}.metric strong{font-size:17px}.diagram .pair{grid-template-columns:1fr}.metadata{gap:6px}}
+    @media print{html{scroll-behavior:auto}body{font:10pt/1.45 Georgia,serif;color:#111;background:white}.shell{display:block;max-width:100%;padding:0 9mm}.desktop-aside,.mobile-toc,.actions,#progress{display:none!important}main{padding:0}.eyebrow,.sec-id,.tag,.callout-label{color:#333}h1{font-size:36pt}h2{font-size:20pt}h3{font-size:13pt}section{break-before:auto;padding-top:12pt;margin-top:12pt;border-top:1pt solid #ccc;break-inside:auto}h2,h3,h4{break-after:avoid}.note,.summary,.metric,.mini,.diagram{background:#fafafa;color:#111;border-color:#ccc;break-inside:avoid}.overview{grid-template-columns:repeat(4,1fr)}.metric strong{color:#111}a{color:#123c71;text-decoration:underline}pre,.eq{background:#f4f4f4;color:#111;white-space:pre-wrap;overflow-wrap:anywhere;break-inside:avoid}table{font-size:8.5pt}tr{break-inside:avoid}th{background:#eaeaea;color:#222}td,th{border-color:#bbb}.diagram .block{color:#111;background:white;border-color:#bbb}.endcap{margin-top:20pt} @page{size:A4;margin:15mm}}
+  </style>
+<style>
+/* Consolidated v3.1 reference annex, isolated from the v4 document shell. */
+.legacy-v3{--surface:var(--panel);--surface-2:var(--panel2);--surface-3:var(--panel2);--text-muted:var(--muted);--accent:var(--mint);--accent-2:var(--blue);--warn:var(--amber);--danger:var(--red);--success:var(--mint);--purple:var(--pink);--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+.legacy-v3 .legacy-section{scroll-margin-top:18px}
+.legacy-v3 .legacy-section h3{color:var(--mint)}
+.legacy-v3 .hero{border-radius:14px;background:var(--panel);border:1px solid var(--border);padding:30px 32px;margin-top:40px}
+.legacy-v3 .hero h2{margin-top:8px}
+.legacy-v3 .hero-top{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 20px}
+.legacy-v3 .pill{display:inline-flex;align-items:center;padding:3px 9px;border:1px solid var(--border);border-radius:999px;font-size:10px;font-weight:750;letter-spacing:0;white-space:normal;line-height:1.55}
+.legacy-v3 .pill-teal,.legacy-v3 .pill-green{color:var(--mint);border-color:color-mix(in srgb,var(--mint) 38%,var(--border))}
+.legacy-v3 .pill-blue{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 38%,var(--border))}
+.legacy-v3 .pill-red{color:var(--red);border-color:color-mix(in srgb,var(--red) 38%,var(--border))}
+.legacy-v3 .pill-amber{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 38%,var(--border))}
+.legacy-v3 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px;margin:18px 0 25px}
+.legacy-v3 .kpi-card{padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.legacy-v3 .kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.035em}
+.legacy-v3 .kpi-val{font-weight:780;font-size:20px;letter-spacing:-.035em;margin:6px 0;color:var(--text);font-variant-numeric:tabular-nums}
+.legacy-v3 .kpi-sub{color:var(--muted);font-size:11px;line-height:1.5}
+.legacy-v3 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin:18px 0 23px}
+.legacy-v3 .table-wrap table{margin:0}
+.legacy-v3 .callout{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--mint);border-radius:9px;padding:17px 20px;margin:18px 0}
+.legacy-v3 .callout-warn{border-left-color:var(--amber)}
+.legacy-v3 .callout-danger{border-left-color:var(--red)}
+.legacy-v3 .callout-title{font-weight:700;margin-bottom:8px}
+.legacy-v3 .two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.legacy-v3 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+.legacy-v3 .btn{font-size:12px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 12px;cursor:pointer}
+.legacy-v3 .btn:hover,.legacy-v3 .btn.active{background:var(--mint);color:var(--bg);border-color:var(--mint)}
+.legacy-v3 .calc-panel{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:23px 20px;margin:20px 0}
+.legacy-v3 .calc-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:18px;margin-bottom:20px}
+.legacy-v3 .control-group label{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:7px}
+.legacy-v3 .control-group input[type=range]{width:100%;accent-color:var(--mint)}
+.legacy-v3 .control-group select{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:10px;font-size:12px;white-space:normal}
+.legacy-v3 .math-block{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--blue);border-radius:8px;padding:15px 18px;margin:14px 0;white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto;font:12.5px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace}
+.legacy-v3 .bar-row{display:flex;align-items:center;gap:6px;margin:3px 0;white-space:nowrap;font:11px/1.4 ui-monospace,monospace}
+.legacy-v3 .bar-track{flex:1;min-width:75px;height:7px;background:var(--panel2);border-radius:6px;overflow:hidden}
+.legacy-v3 .bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--mint),var(--blue))}
+.legacy-v3 .code-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:11px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:10px 10px 0 0}
+.legacy-v3 pre.code-box{margin:0 0 30px;border-radius:0 0 10px 10px;max-height:730px;overflow:auto;background:var(--code);font-size:11.5px;line-height:1.55;white-space:pre;tab-size:4}
+.annex-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:17px}
+.annex-links a{font-size:12px;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--muted)}
+.annex-links a:hover{color:var(--mint);border-color:var(--mint);text-decoration:none}
+.bridge-links{display:flex;gap:20px;flex-wrap:wrap;margin-top:13px!important;font-size:13px}
+#integration-guide .tablewrap td:first-child{min-width:170px}
+#integration-guide .tablewrap td:nth-child(2),#integration-guide .tablewrap td:nth-child(3){min-width:230px}
+.legacy-v3 .legacy-section:not(.hero){padding-top:42px}
+@media(max-width:850px){.legacy-v3 .two-col{grid-template-columns:1fr}.legacy-v3 .hero{padding:20px}.legacy-v3 .calc-panel{padding:16px}.legacy-v3 .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.legacy-v3 .kpi-grid{grid-template-columns:1fr}}
+@media print{.legacy-v3 .hero{background:white;color:#111}.legacy-v3 .kpi-card,.legacy-v3 .calc-panel,.legacy-v3 .callout{background:white;color:#111}.legacy-v3 pre.code-box{max-height:none!important;overflow:visible!important;white-space:pre-wrap;overflow-wrap:anywhere;font-size:8pt}.legacy-v3 .calc-panel{break-inside:avoid}.legacy-v3 .btn{display:none}.legacy-v3 .table-wrap{overflow:visible}.legacy-v3 .bar-fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head>
+<body>
+<div aria-hidden="true" id="progress"></div>
+<div class="shell">
+<aside aria-label="Specification navigation" class="desktop-aside">
+<div class="brand"><span class="mark">P</span><span>PrismOCR <small>Engineering specification</small></span></div>
+<input aria-label="Filter table of contents" class="navsearch" id="navSearch" placeholder="Filter sections…" type="search"/>
+<div id="tocDesktop"></div>
+<div class="sidefoot"><strong>Unified spec / 14 October 2026</strong><br/>v4 normative contract<br/>v3/v3.1 full historical annex<br/>31+ sections and cross-references<br/><br/>Design targets are not experimental results unless explicitly measured.</div>
+</aside>
+<main id="main">
+<details class="mobile-toc"><summary>Contents / Jump to section</summary><nav id="tocMobile"></nav></details>
+<div class="actions"><button aria-label="Toggle color theme" class="chipbtn" id="themeToggle" type="button">Light mode</button><button class="chipbtn" onclick="window.print()" type="button">Print / PDF</button></div>
+<header>
+<div class="eyebrow">Unified engineering specification • v4 contract + v3.1 reference</div>
+<h1>PrismOCR <em>Unified</em><br/>Engineering specification</h1>
+<p class="lead">One authoritative v4 system contract, with the complete v3/v3.1 audit, Khmer glyph experiments, mathematical derivations, interactive MAC estimator, and PyTorch reference implementation retained in a historical technical annex.</p>
+<div class="metadata"><span class="pill">Status: proposed</span><span class="pill">Audience: ML / CV / inference engineers</span><span class="pill">Baseline: PrismOCR v3</span><span class="pill">Target: ≤10 MB FP32 weights</span><span class="pill">Scope: text + layout + tables + KV</span><span class="pill">Merged source: v3/v3.1 + v4</span></div>
+<div class="hero-divider"></div>
+<div class="overview">
+<div class="metric"><span>Weight storage ceiling</span><strong>10 MB</strong><small>FP32; ≤2.5M 32-bit values</small></div>
+<div class="metric"><span>Baseline reported</span><strong>6.10 MB</strong><small>V3 fused weight bytes; not v4</small></div>
+<div class="metric"><span>Primary languages</span><strong>Khmer + EN</strong><small>Document + scene-text eval</small></div>
+<div class="metric"><span>Deployment target</span><strong>CPU-first</strong><small>Measured, not inferred from size</small></div>
+</div>
+<div class="summary"><span class="callout-label">Decision summary</span><h3>Preserve the backbone. Replace the proposal contract and execution topology.</h3><p>V3's supervision fixes are useful but insufficient. V4 shall separate text-line detection from hierarchical region/cell detection; match only geometrically plausible proposals; run OCR only on text-bearing boxes; encode explicit relation nulls and table grids; and require reproducible quality, latency, and portability evidence before release.</p><p class="bridge-links"><a href="#integration-guide">Read the version decision map →</a> <a href="#v3-annex-overview">Open the v3/v3.1 technical annex →</a></p></div>
+</header>
+<section data-group="Foundation" data-title="Version contract and decision map" id="integration-guide">
+<span class="sec-id">M0 / merged contract</span>
+<h2>How to use this unified specification</h2>
+<p><strong>The v4 requirements and acceptance gates are normative.</strong> The complete v3/v3.1 report is retained as historical engineering evidence and executable reference code, not as a claim that the v4 architecture has been implemented or benchmarked. The two versions are not interchangeable.</p>
+<div class="note info"><h3>Evidence and implementation boundary</h3><p>Reported v3/v3.1 weights, MAC counts and test claims remain attributed to the source. V4 accuracy, end-to-end CPU latency, portable ONNX execution, sparse runtime speedups and integrated training success remain <strong>unverified targets</strong> until reproduced. A syntax-parsable v3.1 module is not a validated v4 implementation.</p></div>
+<div class="tablewrap"><table><thead><tr><th>Technical decision</th><th>v3/v3.1 source position</th><th>Unified v4 contract</th><th>Primary reference</th></tr></thead><tbody>
+<tr><td>Detector topology</td><td>One proposal pool; v3.1 adds three hierarchy tiers to avoid center collision</td><td><strong>Two typed detection streams:</strong> text lines separate from regions/cells; nesting allowed</td><td><a href="#s03">Architecture</a> · <a href="#deep-dive-blockers">V3 blockers</a></td></tr>
+<tr><td>Matching semantics</td><td>Rectangular Hungarian + aligned teacher forcing; earlier “proposal recall” conflates assignment with detection</td><td>Reuse a single immutable MatchSet; require geometry-accepted detection recall</td><td><a href="#s06">Matching</a> · <a href="#audit-ledger">Audit ledger</a></td></tr>
+<tr><td>OCR execution</td><td>v3 full K=96 paths; v3.1 active-gated sequences proposed</td><td>Physically compact <em>text-only</em> OCR batches; investigate Conv1D versus transformer using real CPU and CER data</td><td><a href="#s07">Recognition</a> · <a href="#compute-calculator">MAC model</a></td></tr>
+<tr><td>CTC labels</td><td>512-class fixed vocabulary; v3.1 code offers a truncation fallback</td><td>Corpus-audited Unicode vocabulary; never silently discard or truncate full-text targets</td><td><a href="#s07">CTC policy</a> · <a href="#pytorch-impl">Reference source</a></td></tr>
+<tr><td>Relations and tables</td><td>Masked structural attention and heuristic relation/grid decoding</td><td>Typed, NULL-aware sparse graph and validated table grid/spans</td><td><a href="#s08">Document graph</a> · <a href="#s09">Tables</a></td></tr>
+<tr><td>Weight-size accounting</td><td>v3 source: 1,524,997 fused params (~6.10 MB); v3.1 proposed: 1,525,255</td><td>Hard ceiling: 10,000,000 actual FP32 tensor bytes; re-inventory every v4 candidate</td><td><a href="#s14">Compute &amp; memory</a> · <a href="#arch-evolution">Baseline evolution</a></td></tr>
+<tr><td>Verification status</td><td>Targeted numerical checks and Khmer rendering measurements; not full real-document validation</td><td>Dataset, baseline, regression suite, quality metrics, CPU timings and export parity required for release</td><td><a href="#s18">Verification</a> · <a href="#khmer-verification">Khmer study</a></td></tr>
+</tbody></table></div>
+<div class="columns"><div class="mini"><h3>Build the current design</h3><p>Follow <a href="#s02">v4 requirements</a> through <a href="#s19">implementation milestones</a>; resolve candidate choices via evaluation.</p></div><div class="mini"><h3>Inspect earlier implementation</h3><p>Use <a href="#v3-annex-overview">Annex A</a> for legacy audit rationale, source-level details, and self-contained experimental code.</p></div></div>
+</section><section data-group="Foundation" data-title="Executive contract" id="s00"><span class="sec-id">00 / executive contract</span><h2>What this specification commits to</h2>
+<p><strong>Objective.</strong> Produce an end-to-end trainable OCR/document-understanding model that consumes page images and emits text lines, semantic roles, reading order, table cells, key/value associations, and structured outputs while keeping the inference model within 10 MB of FP32 weights.</p>
+<p><strong>Principle.</strong> Quality and actual CPU latency outrank incremental weight reduction. A small model that misses Khmer combining marks, mishandles nested document elements, or executes dozens of unnecessary OCR sequences fails the objective.</p>
+<div class="columns">
+<div class="mini"><h3>Mandatory deliverables</h3><ul><li>Versioned PyTorch model and tokenizer</li><li>Document annotation schema and converters</li><li>Deterministic training/evaluation harness</li><li>Structured JSON + HTML/Markdown export</li><li>CPU benchmark and ONNX parity report</li><li>Reproducible validation artifacts</li></ul></div>
+<div class="mini"><h3>Explicit non-goals for first release</h3><ul><li>Translation, summarization or VLM dialogue</li><li>Handwriting as a launch guarantee</li><li>100% fidelity on arbitrary documents</li><li>Assuming CoreML/TFLite compatibility</li><li>GPU-only performance claims</li><li>Autonomous online self-training</li></ul></div>
+</div>
+<div class="note info"><h3>Evidence status</h3><p>The provided material reports a 1,524,997-parameter fused PrismOCR v3 and targeted toy tests. Full reproducibility was not established from the pasted, formatting-damaged code. V4 numbers below are <strong>design limits or proposed gates</strong>, not achieved experimental results. No trained OCR quality or real CPU latency has been supplied.</p></div>
+</section>
+<section data-group="Foundation" data-title="Source findings and disposition" id="s01"><span class="sec-id">01 / evidence ledger</span><h2>Source findings and disposition</h2>
+<p>Source A is the PrismOCR v3 resolution report; Source B is the UniDoc-Nano → OmniDoc-Nano → PrismOCR v2 architectural audit, both supplied in the original Markdown. The review of v3 identified remaining risks. Each row below separates the alleged fix from what v4 still needs.</p>
+<div class="tablewrap"><table><thead><tr><th>Finding</th><th>V3 disposition</th><th>V4 requirement</th><th>Priority</th></tr></thead><tbody>
+<tr><td>Fractional Gaussian centers</td><td>Snapped integer centers produce positive target</td><td>Keep, but detect collisions/overflow and avoid hierarchy competition</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Teacher-force M≠K</td><td>Matched-slot interpolation preserves shape</td><td>Compute assignment once and pass to both OCR and loss</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Greedy matching / M&gt;K</td><td>Rectangular Hungarian assignment</td><td>Keep optimizer; constrain acceptance by geometric quality</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Flat heatmaps</td><td>No adjacent selected pixels; excess masked</td><td>Require local maxima and calibrated confidence; do not count background peaks</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>CTC overlength</td><td>Exact minimum-frame check</td><td>No silently truncated full-text supervision; split/resize/reject with reason</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Single global proposal pool</td><td>Still flat over overlapping roles</td><td>Separate text and structural instances with typed matching</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Dense OCR transformer</td><td>≈7.86B sequence-core MACs for K=96</td><td>Sparse OCR execution and efficiency ablation</td><td><span class="tag p0">P0</span></td></tr>
+<tr><td>Proposal padding in attention</td><td>Mask output exists, not fully propagated</td><td>Mask attention/loss and physically compact OCR batches</td><td><span class="tag p1">P1</span></td></tr>
+<tr><td>Decoder relations/table spans</td><td>Improved but heuristic</td><td>Typed null-aware edges and conflict-free grid reconstruction</td><td><span class="tag p1">P1</span></td></tr>
+<tr><td>Vocabulary unknown characters</td><td>512 codepoint classes with UNK</td><td>Corpus-derived fixed vocabulary with OOV report and no silent dropping</td><td><span class="tag p1">P1</span></td></tr>
+</tbody></table></div>
+<div class="note warn"><h3>Metric correction</h3><p>Matching <code>min(M,K_valid)</code> items is <em>assignment coverage</em>, not object-detection recall. V3 can report 100% “proposal_recall” with geometrically wrong boxes. V4 must rename this statistic and measure detection recall only after an overlap/distance acceptance check.</p></div>
+</section>
+<section data-group="Foundation" data-title="Requirements and success conditions" id="s02"><span class="sec-id">02 / requirements</span><h2>Requirements and success conditions</h2>
+<div class="tablewrap"><table><thead><tr><th>ID</th><th>Normative requirement</th><th>Verification</th></tr></thead><tbody>
+<tr><td>FR-01</td><td>Detect multilingual oriented text lines without competing with table/section proposals</td><td>Nested-entity detector tests; recall @ IoU thresholds</td></tr>
+<tr><td>FR-02</td><td>Recover semantic regions and table cells as separate typed instances</td><td>Hierarchy collision and span fixtures</td></tr>
+<tr><td>FR-03</td><td>Recognize Khmer + English codepoint sequences, preserving combining marks</td><td>Language-stratified CER and mark-level error reports</td></tr>
+<tr><td>FR-04</td><td>Output stable reading order, hierarchy, table grid and KV relations</td><td>Graph validity, TEDS, relation F1</td></tr>
+<tr><td>FR-05</td><td>Provide deterministic, index-consistent teacher forcing and supervision</td><td>Property-based matching and backward tests</td></tr>
+<tr><td>FR-06</td><td>Handle empty, sparse, dense, tiled, long-line and out-of-vocabulary pages</td><td>Edge-case suite plus production-style corpus</td></tr>
+<tr><td>NFR-01</td><td>Fused inference weights ≤10,000,000 FP32 bytes (not MiB)</td><td>Actual serialized tensor-byte inventory</td></tr>
+<tr><td>NFR-02</td><td>Primary inference path must work on x86_64 CPU</td><td>End-to-end timed CPU benchmark</td></tr>
+<tr><td>NFR-03</td><td>Local development must support a 6 GB VRAM single-GPU profile</td><td>Recorded peak allocated/reserved VRAM</td></tr>
+<tr><td>NFR-04</td><td>No silent label truncation, fabricated confidence, or false success metric</td><td>Assertions, diagnostics, evaluator contract</td></tr>
+<tr><td>NFR-05</td><td>Model/data/export artifacts versioned and backward compatibility explicit</td><td>Schema and checksum tests</td></tr>
+</tbody></table></div>
+<p>The weight ceiling is a hard constraint. Runtime latency and accuracy must be evaluated against a reproducibly trained v3 baseline, not guessed from the number of parameters. Any additional absolute quality or latency thresholds are to be fixed after the first baseline measurement and before examining the final test set.</p>
+</section>
+<section data-group="Model" data-title="System architecture" id="s03"><span class="sec-id">03 / architecture</span><h2>System architecture</h2>
+<div aria-label="Page image through shared backbone, separate text and structural streams, sparse OCR and graph decoding, unified document output" class="diagram" role="img">
+<div class="block">Input image / high-resolution tiles<small>RGB tensor, transform history, coordinate map</small></div>
+<div class="arrow">↓</div><div class="block accent">Shared anisotropic vision backbone<small>Stride-4 glyph features + stride-8 / stride-16 semantic features</small></div>
+<div class="arrow">↓</div><div class="pair"><div class="block blue">Text-line detector<small>Heatmap + oriented boxes + confidence, line proposals only</small></div><div class="block blue">Region instance detector<small>Typed region/cell queries; overlaps permitted across hierarchy</small></div></div>
+<div class="arrow">↓</div><div class="pair"><div class="block">Sparse OCR path<small>Selected line boxes → 5-row sampler → Conv1D/CTC</small></div><div class="block">Typed document graph<small>Region membership, order, KV links, right-cell + null</small></div></div>
+<div class="arrow">↓</div><div class="block accent">Deterministic document assembler<small>Assign line text to regions/cells → validate graph/grid → export JSON, HTML, Markdown</small></div>
+</div>
+<h3>Instance ontology</h3>
+<div class="tablewrap"><table><thead><tr><th>Stream</th><th>Instance</th><th>Labels / semantics</th><th>Can overlap?</th></tr></thead><tbody>
+<tr><td>Text</td><td><code>TEXT_LINE</code></td><td>Semantic role: title, heading, paragraph, list, key, value, caption, header, footer, formula, unknown</td><td>Lines may overlap only when genuinely annotated</td></tr>
+<tr><td>Structure</td><td><code>REGION</code></td><td>Page section, table, list block, form field, generic group</td><td>Yes, with child regions/cells</td></tr>
+<tr><td>Structure</td><td><code>CELL</code></td><td>Table cell with optional header/body role, row/column membership</td><td>Yes with containing table, not arbitrary sibling cells</td></tr>
+</tbody></table></div>
+<p>Two detector heads are the architectural split; the <strong>region head contains typed instance queries</strong> for regions and cells, without cross-type NMS that would suppress a table and its contained cells. This is distinct from merely replacing one global heatmap with two identical single-channel maps.</p>
+<h3>Design constraints</h3>
+<ul><li>Retain the v3 multi-scale anisotropic backbone initially, so changes can be attributed to the proposal and OCR redesign.</li><li>Do not attach OCR computation to structural-only boxes. Text inside a table cell is recognized as one or more text-line instances and associated to that cell.</li><li>Keep positional/feature dimensions explicit. The reference width is <code>D=160</code>; changing it is an ablation, not a hidden implementation detail.</li><li>Any extra decoder parameters must remain within the actual FP32 byte ceiling and have a measured quality/latency justification.</li></ul>
+</section>
+<section data-group="Model" data-title="Tensor and label contracts" id="s04"><span class="sec-id">04 / interfaces</span><h2>Tensor and label contracts</h2>
+<p>Use a single image transform per sample and retain its inverse. All boxes emitted by the model use <strong>normalized coordinates in transformed page or tile space</strong>; downstream JSON can optionally include original-image pixel polygons via the inverse transform.</p>
+<div class="tablewrap"><table><thead><tr><th>Tensor</th><th>Shape</th><th>Contract</th></tr></thead><tbody>
+<tr><td><code>images</code></td><td><code>[B,3,H,W]</code></td><td>RGB, normalized; H/W multiples of backbone stride</td></tr>
+<tr><td><code>f4, f8, f16</code></td><td><code>[B,C_s,H/s,W/s]</code></td><td>Feature maps at strides 4/8/16; C4 and C8 set by backbone</td></tr>
+<tr><td><code>text_scores, text_boxes</code></td><td><code>[B,Kt], [B,Kt,6]</code></td><td>Sorted proposals; boxes <code>cx,cy,w,h,sinθ,cosθ</code></td></tr>
+<tr><td><code>text_mask</code></td><td><code>[B,Kt]</code></td><td>Boolean: true = accepted candidate, not merely filled slot</td></tr>
+<tr><td><code>region_scores, boxes, kinds</code></td><td><code>[B,Kr], [B,Kr,6], [B,Kr,Ckind]</code></td><td>Typed region / table / cell proposals; nested objects allowed</td></tr>
+<tr><td><code>region_mask</code></td><td><code>[B,Kr]</code></td><td>Boolean validity; all padded entries excluded throughout</td></tr>
+<tr><td><code>match_text, match_region</code></td><td>Variable-length pairs</td><td>Immutable GT↔prediction index maps per image per forward</td></tr>
+<tr><td><code>ocr_logits</code></td><td><code>[Ntext,T_i,V]</code> grouped by length bucket</td><td>Only selected text instances, not fixed B×K OCR tensor</td></tr>
+<tr><td><code>graph_edges</code></td><td>Ragged / sparse</td><td>Typed endpoints by stable instance ID, explicit null candidate</td></tr>
+</tbody></table></div>
+<div class="note info"><h3>Box encoding</h3><p>All boxes must have finite centers/sizes, positive width and height, and a normalized orientation vector. <code>sinθ</code>/<code>cosθ</code> cannot be trained as unrestricted raw numbers with naive L1 equivalence. Define a canonical angle range or angle-periodic regression objective. Compute detection IoU on rotated polygons when evaluating oriented text; axis-aligned IoU is a separately named diagnostic.</p></div>
+<h3>Annotation schema, source of truth</h3>
+<pre><code>{
+  "schema_version": "4.0",
+  "document_id": "doc-001",
+  "page_id": "doc-001:p0",
+  "image": {"width": 1536, "height": 2176, "sha256": "..."},
+  "lines": [{
+    "id": "l1", "polygon_px": [[100,120],[600,115],[602,160],[103,166]],
+    "text": "ឯកសារ / Document", "role": "TITLE", "language": "mixed"
+  }],
+  "regions": [{"id":"r1","kind":"TABLE","polygon_px":[[80,300],[1400,300],[1400,900],[80,900]]}],
+  "cells": [{"id":"c1","table_id":"r1","row":0,"col":0,"rowspan":1,"colspan":2,
+             "is_header":true,"polygon_px":[[90,330],[900,330],[900,390],[90,390]]}],
+  "relations": [{"type":"CONTAINS","source":"r1","target":"c1"}],
+  "reading_order": ["l1"],
+  "annotation": {"source":"human", "revision":"v1"}
+}</code></pre>
+<p>Derived or suggested edges must never masquerade as ground truth. The annotation validator rejects missing targets, duplicate IDs, inconsistent cell spans, invalid polygons, and cross-page references. This compact example illustrates the record shape, not a fully annotated table.</p>
+</section>
+<section data-group="Model" data-title="Detection and proposal generation" id="s05"><span class="sec-id">05 / detection</span><h2>Detection and proposal generation</h2>
+<h3>Text-line head</h3>
+<ol><li>Produce stride-4 or stride-8 confidence logits, box geometry, and semantic line embeddings from shared features.</li><li>Train with integer-anchored Gaussian targets or a validated equivalent, ensuring non-empty pages with representable centers have positive supervision.</li><li>Define local maxima using a bounded neighborhood and calibrated confidence threshold. Stable tie-breaking is allowed only <em>after</em> candidate validity is established.</li><li>Apply spatial deduplication to same-stream duplicates. Do not suppress related region/cell instances from the other head.</li><li>Return at most <code>Kt</code> accepted line proposals plus a validity mask. Capacity overflow is counted.</li></ol>
+<div class="note stop"><h3>Flat-map invariant</h3><p>On a uniform 0-logit map (<code>sigmoid=0.5</code>), the detector must not claim any accepted text object under a calibrated threshold above 0.5. A custom threshold is permitted, but it must be fixed on validation data and tested on blank, gradient and plateau inputs.</p></div>
+<h3>Region / cell head</h3>
+<p>Use a small typed query decoder or equivalent instance head, initially with a configurable <code>Kr=64</code> queries. Queries may represent a table and its constituent cells even when their bounding boxes are nested. Matching is type-aware; only duplicates of the same kind may be removed. Relation edges express containment rather than encoding all hierarchy in a single foreground heatmap.</p>
+<div class="tablewrap"><table><thead><tr><th>Failure mode</th><th>Contract</th><th>Targeted test</th></tr></thead><tbody>
+<tr><td>Table center ≈ cell center</td><td>Both independently representable</td><td>Identical-center TABLE+CELL fixture</td></tr>
+<tr><td>Two dense nearby lines</td><td>Resolution-adaptive detection or tiling, not silent deletion</td><td>Nearest-neighbor center sweep</td></tr>
+<tr><td>Blank/flat page</td><td>No false non-background proposal accepted</td><td>White, black, low-contrast, plateau samples</td></tr>
+<tr><td>Objects beyond Kt/Kr</td><td>Emit overflow stats; route through tiles or increased query profile</td><td>Dense-page count sweep</td></tr>
+</tbody></table></div>
+<p><strong>Capacity policy.</strong> <code>Kt</code> and <code>Kr</code> are ceilings, not assumed document counts. Measure 95th/99th percentiles on the real corpus and choose defaults that fit the weight/runtime budget. For overflow, process overlapping tiles and merge geometrically instead of discarding tail objects.</p>
+</section>
+<section data-group="Model" data-title="Matching and teacher forcing" id="s06"><span class="sec-id">06 / supervision</span><h2>Matching and teacher forcing</h2>
+<h3>One assignment per stream per forward</h3><p>Compute Hungarian assignments from the same detached prediction snapshot that will be used by OCR sampling and all downstream losses. Persist the resulting <code>MatchSet</code> in the forward result. The loss module must <strong>not recompute</strong> a potentially different mapping.</p>
+<pre><code>MatchSet = {
+  matched_gt_idx: LongTensor[N],
+  matched_pred_idx: LongTensor[N],
+  gt_count: int,
+  valid_pred_count: int,
+  unmatched_gt_idx: LongTensor[M-N],
+  candidate_quality: FloatTensor[N],
+  assignment_coverage: float,
+}
+
+# Pseudocode: pure matching, explicit absence handling
+candidates = pred[mask]
+cost = w_cls*C_class + w_box*C_box + w_iou*(1-IoU)
+assign = hungarian(cost)                 # min(M,Kvalid), no crash on empty
+accepted = validate_geometry(assign)    # NOT merely "a match exists"
+match_set = freeze(assign, accepted)
+loss = train_from(match_set)
+ocr_boxes = schedule_gt_boxes(match_set, ratio=alpha)</code></pre>
+<div class="eq">assignment_coverage = N_assigned / M_gt     (diagnostic only)
+proposal_recall@τ = N_unique_GT_with_accepted_candidate(IoU≥τ) / M_gt</div>
+<p>For rotated boxes, use rotated polygon IoU; for very thin lines also report center-distance/height-normalized tolerances as secondary measurements. Match cost must be independent of non-finite values and robust to identical costs. Treat <code>M=0</code>, <code>K=0</code>, and <code>M&gt;K</code> as first-class cases.</p>
+<h3>Teacher-forcing policy</h3><ul><li>Apply GT box interpolation only to matched proposal slots; preserve prediction-to-node identity.</li><li>Training uses scheduled sampling (<code>alpha</code> from 1 toward 0) based on a <em>declared training step schedule</em>, not hidden heuristics.</li><li>For early training with poor proposals, optional GT query injection is permitted as a separate, flagged experiment; disable it for validation/inference.</li><li>Do not accept implausibly distant assignments as successful detection, even if they receive auxiliary regression gradients.</li><li>One consistent mapping governs box regression, semantic role loss, CTC text targets, and relation endpoint remapping.</li></ul>
+<div class="note warn"><h3>Unmatched supervision</h3><p>If a GT object has no valid candidate, record it as a detection miss and continue optimizing dense detection/objectness targets. Do not attach its text to an unrelated OCR node merely to keep the CTC batch full. Reject batches only for actual data-contract violations.</p></div>
+</section>
+<section data-group="Model" data-title="Sparse OCR and CTC" id="s07"><span class="sec-id">07 / recognition</span><h2>Sparse OCR and CTC recognition</h2>
+<h3>Selection contract</h3><p>Run recognition on text-line candidates only. At inference, OCR inputs must satisfy <code>text_mask &amp; (text_score ≥ calibrated_threshold)</code>, optionally after additional lightweight line-role filtering. At training, include matched text proposals and explicitly sampled hard negatives only when a defined recognition-negative objective is enabled.</p>
+<p>Flatten accepted proposals across the batch into an <strong>actual compact list</strong> of length <code>Ntext</code>. Never allocate or execute recognition over fixed <code>B×Kt</code> slots and only mask the result afterward. Preserve per-line metadata for scattering decoded text to original document IDs.</p>
+<h3>Oriented feature sampler</h3><p>Retain v3's five-row bilinear sample over stride-4 glyph features. Sample a grid of <code>P_h=5</code> rows by <code>L_i</code> frames per line; rotate/scale by its normalized box orientation and collapse rows with a learnable vertical operator. Verify alignment between normalized box coordinates and <code>grid_sample(..., align_corners=False)</code> pixel-center conventions.</p>
+<div class="eq">P_i ∈ ℝ[D × 5 × L_i] → vertical collapse → S_i ∈ ℝ[L_i × D]
+T_min(y) = len(y) + count(y[j] == y[j-1] for j = 1…len(y)-1)</div>
+<h3>Adaptive sequence lengths</h3><p>Use <code>L∈{64,128,160,256}</code> as initial configurable length buckets, subject to actual alignment and performance results. Training may assign a bucket from GT transcript lengths; inference must choose from observable image geometry/recognizer predictors, <em>never the hidden GT text</em>. Monitor long-line failure and bucket occupancy. If minimum frames exceed the highest supported bucket, split at verified line segmentation boundaries or mark unsupported; never silently truncate a full-line label.</p>
+<h3>Recognizer candidates</h3>
+<div class="tablewrap"><table><thead><tr><th>Variant</th><th>Architecture</th><th>Purpose</th><th>Decision rule</th></tr></thead><tbody>
+<tr><td>R0 baseline</td><td>V3 2× shared 5-head transformer blocks, D=160</td><td>Accuracy/cost anchor</td><td>Always train once; do not assume CPU suitability</td></tr>
+<tr><td>R1 candidate</td><td>Stacked depthwise-separable gated 1D conv + pointwise mixing</td><td>Fast CPU sequence modeling</td><td>Promote only if CER non-regression and latency improve</td></tr>
+<tr><td>R2 optional</td><td>Hybrid conv + one lightweight attention block</td><td>Recover long-range context</td><td>Consider if R1 fails on long Khmer lines</td></tr>
+</tbody></table></div>
+<p>All candidate models share the tokenizer, detection outputs, training split, and evaluator. Ablations must keep all unrelated weights/configuration fixed. Report sequence-core MACs, total model MACs, actual CPU latency, and peak RSS separately.</p>
+<h3>Vocabulary and Unicode</h3><ul><li>Maintain <code>blank_id=0</code>, reserve explicit unknown handling, and version a fixed vocabulary artifact with SHA-256. Begin with the reported v3 512-class design but rebuild the remaining entries based on corpus coverage.</li><li>Include Khmer base letters and combining marks; preserve canonical transcript provenance. Unicode NFC may be evaluated as a controlled normalization policy, never applied invisibly.</li><li>Before freezing vocabulary, measure unknown rate per language, document subtype, symbol category, and currency usage. Unknown characters must emit visible replacement/error metadata, not disappear on decode.</li><li>Record raw CER and any normalized CER separately, with explicit normalization steps. Score Khmer marks and coeng sequences as a dedicated error slice.</li></ul>
+<h3>CTC supervision</h3><p>Validate <code>T_min(y) ≤ L</code> before calling the loss. Set <code>zero_infinity=False</code> to surface invalid alignment assumptions and check loss/gradient finiteness. If a line cannot be supervised honestly, log <code>ctc_rejection_reason</code> and its sample ID, then split, re-bucket or exclude through a declared data policy. Do not use truncation as a fallback.</p>
+<div class="note info"><h3>Decode policy</h3><p>Greedy CTC decode is the initial deterministic default. Optional beam search or lightweight language-aware reranking is a separate experiment. Keep original per-frame logits/confidence available for diagnostics; decoded string probability must not be misrepresented as calibrated sequence confidence without validation.</p></div>
+</section>
+<section data-group="Structured output" data-title="Graph and reading order" id="s08"><span class="sec-id">08 / document graph</span><h2>Document graph and reading order</h2>
+<p>The document graph connects stable <code>line:</code>, <code>region:</code>, and <code>cell:</code> instance IDs. A single index space is permitted internally, but endpoints must retain their type. Graph predictions are sparse and masked; relation classes have an explicit <code>NULL</code> candidate rather than abusing diagonal self-links to represent absence.</p>
+<div class="tablewrap"><table><thead><tr><th>Relation</th><th>Allowed source → target</th><th>Constraint</th></tr></thead><tbody>
+<tr><td><code>NEXT</code></td><td>Line → line, within same reading-order scope</td><td>At most one outgoing edge; no cycles after resolution</td></tr>
+<tr><td><code>PARENT</code></td><td>Line/cell/region → region or cell</td><td>No self-links; must be acyclic and geometric-compatible</td></tr>
+<tr><td><code>KV_VALUE</code></td><td>KEY line → VALUE line or value-bearing region</td><td>Typed target and one-to-many policy explicit</td></tr>
+<tr><td><code>RIGHT_CELL</code></td><td>Cell → sibling cell of same table</td><td>Must be horizontally ordered; cannot cross rows without evidence</td></tr>
+<tr><td><code>CONTAINS</code></td><td>Region/cell → line/cell/region</td><td>Derived from validated parent edges or annotations</td></tr>
+</tbody></table></div>
+<h3>Prediction and decoding</h3><ol><li>Construct embeddings for valid line and structure instances only. Use key-padding masks for variable-length batched attention; zero out padded query outputs before losses.</li><li>Score type-valid edge candidates plus <code>NULL</code>, with candidate generation constrained by page, document grouping, and geometric plausibility.</li><li>Resolve <code>NEXT</code> using confidence-aware cycle handling, then stable topological ordering with geometry only as a fallback.</li><li>Resolve <code>PARENT</code> / containment, rejecting cycles and invalid parent types. Prefer authoritative table membership where cell annotations exist.</li><li>Return edge confidence and explicit reason codes for suppressed/ambiguous relations.</li></ol>
+<p>Do not assume a global top-to-bottom ordering is adequate for two columns, marginalia, mixed Khmer/English flow, or vertical labels. Evaluation must include multi-column and tables with independent line-order scope.</p>
+<div class="note warn"><h3>Reading-order invariant</h3><p>Each active text line appears exactly once in the final reading-order output, unless explicitly tagged as a duplicate removed during tile stitching. A cycle must be resolved deterministically and logged; the decoder must not hang, silently drop nodes, or invent a missing line.</p></div>
+</section>
+<section data-group="Structured output" data-title="Table grid and key-value reconstruction" id="s09"><span class="sec-id">09 / structured decoding</span><h2>Tables, cells and key-value extraction</h2>
+<h3>Grid reconstruction is constrained, not a side effect of overlap heuristics</h3><p>Detect table and cell instances, associate cells with the correct table, infer row and column tracks, and solve a non-overlapping placement problem. Cell geometry, learned right-neighbor signals and learned row/column affinities inform placement. A valid solved grid must never have conflicting cell origins or overlapping occupied slots.</p>
+<ol><li><strong>Group.</strong> Assign a cell to at most one parent table, with <code>NULL</code> for unassigned cells. Prevent joining adjacent tables merely because their bounding boxes are near.</li><li><strong>Infer tracks.</strong> Prefer learned row/column indices or separator proposals; use interval clustering as fallback. Require monotonically sorted tracks.</li><li><strong>Assign spans.</strong> Infer <code>(row, col, rowspan, colspan)</code> for each cell; nonnegative origins and strictly positive spans are mandatory.</li><li><strong>Resolve conflicts.</strong> Optimize global consistency or report a structured table-error state. Never overwrite <code>cell_by_origin[(r,c)]</code> without detecting a collision.</li><li><strong>Assemble text.</strong> Attach contained recognized text lines to each cell and order those lines. A line should not be duplicated across cells unless annotations explicitly support that duplication.</li><li><strong>Render.</strong> Emit semantic <code>&lt;th&gt;</code>/<code>&lt;td&gt;</code> based on predicted/annotated header status, not an assumed first header row. Use escaped text and true HTML row/column spans.</li></ol>
+<div class="eq">For any distinct cells a, b:
+OccupiedSlots(a) ∩ OccupiedSlots(b) = ∅
+For each cell: 0 ≤ row, col; rowspan ≥ 1; colspan ≥ 1
+End coordinates must remain within the declared table grid.</div>
+<h3>Markdown lossiness</h3><p>Standard Markdown tables cannot faithfully represent <code>rowspan</code> or <code>colspan</code>. For nontrivial spans, the Markdown export shall embed sanitized HTML or explicitly annotate the loss of structure. Never claim a pipe table with <code>[2x3]</code> labels is structurally equivalent to HTML.</p>
+<h3>Key/value extraction</h3><p>Only type-compatible links may form pairs. Normalize display keys separately from their original source text, preserve original Unicode, and keep duplicate keys as an <em>array of entries</em> instead of overwriting them in a dictionary. Return source/target IDs, confidence, page and reading order for auditability.</p>
+<pre><code>{
+  "table_id": "r:12", "status": "valid", "rows": 2, "cols": 3,
+  "cells": [
+    {"id":"c:1","row":0,"col":0,"rowspan":1,"colspan":2,
+     "header":true,"text":"Description","line_ids":["l:10"]},
+    {"id":"c:2","row":0,"col":2,"rowspan":1,"colspan":1,
+     "header":true,"text":"Amount","line_ids":["l:11"]}
+  ],
+  "html": "&lt;table&gt;...&lt;th colspan=\"2\"&gt;Description&lt;/th&gt;...&lt;/table&gt;",
+  "conflicts": []
+}</code></pre>
+<div class="note info"><h3>Renderer safety</h3><p>Escape recognized content before embedding into HTML, including angle brackets, ampersands and quotes. Never treat OCR output as trusted markup. Schema output is the source of truth; HTML and Markdown are derived presentations.</p></div>
+</section>
+<section data-group="Training" data-title="Losses and optimization" id="s10"><span class="sec-id">10 / objective</span><h2>Losses and optimization</h2>
+<div class="eq">L_total = λdet·L_det + λreg·L_region + λbox·L_box
+        + λrole·L_role + λctc·L_CTC + λgraph·L_graph
+        + λgrid·L_grid (+ λaux·L_aux if justified)</div>
+<p>The coefficients are configured and logged with each run. Do not hard-code unsupported empirical weights into the architecture spec. Starting values may be chosen from independently normalized loss magnitudes on pilot batches and must be recorded with an ablation.</p>
+<div class="tablewrap"><table><thead><tr><th>Loss</th><th>Training signal</th><th>Masking / edge cases</th></tr></thead><tbody>
+<tr><td><code>L_det</code></td><td>Text heatmap/objectness; balanced positives/negatives</td><td>Blank page has background loss but no positive denominator failure</td></tr>
+<tr><td><code>L_region</code></td><td>Typed region/cell instance classification and no-object queries</td><td>Absent categories, nested structures, overflow</td></tr>
+<tr><td><code>L_box</code></td><td>Smooth L1 centers/sizes + rotated IoU/periodic orientation</td><td>Matched indices only; finite positive geometry</td></tr>
+<tr><td><code>L_role</code></td><td>Semantic line and region roles</td><td>Ignore padding; class imbalance policy explicit</td></tr>
+<tr><td><code>L_CTC</code></td><td>Variable-length text-line alignment</td><td>Valid text matches only; zero-infinity disabled</td></tr>
+<tr><td><code>L_graph</code></td><td>Typed graph links including NULL</td><td>Only type-valid endpoint pairs; missing targets explicit</td></tr>
+<tr><td><code>L_grid</code></td><td>Row/column/span/adjacency (if head trained)</td><td>Table-only; ignore missing table labels</td></tr>
+</tbody></table></div>
+<h3>Numerical requirements</h3><ul><li>Loss and gradient tensors must remain finite in FP32 and mixed-precision training.</li><li>Every non-empty matched text batch must produce gradient in the recognizer; unmatched GT must still contribute dense detection supervision.</li><li>Mixed-precision mode must not silently alter CTC targets or box geometry. Normalize angular vectors with an epsilon.</li><li>Gradient clipping, optimizer, EMA, random seeds, and scheduler are config choices, stored in checkpoints and reports.</li></ul>
+</section>
+<section data-group="Training" data-title="Dataset and annotation strategy" id="s11"><span class="sec-id">11 / data</span><h2>Dataset and annotation strategy</h2>
+<h3>Data sources and provenance</h3><p>Use two independently tracked pools: synthetic rendered pages with complete labels, and permissioned real Khmer/English pages with audited annotations. The original source notes do not provide a corpus inventory; no dataset size or real-world accuracy is asserted here.</p>
+<div class="tablewrap"><table><thead><tr><th>Slice</th><th>Required cases</th><th>Checks</th></tr></thead><tbody>
+<tr><td>Khmer typography</td><td>Multiple fonts, coeng/stacked consonants, dependent vowels, superscripts, small print</td><td>Per-codepoint and combining-mark coverage</td></tr>
+<tr><td>Bilingual content</td><td>Mixed Khmer/English, numbers, currency, dates, punctuation</td><td>OOV rate; mixed-script CER</td></tr>
+<tr><td>Document layouts</td><td>Receipts, invoices, IDs/forms, reports, lists, headers, footers</td><td>Role frequency and annotation completeness</td></tr>
+<tr><td>Tables</td><td>Bordered/borderless, merged cells, blank cells, multiple tables, table-with-text</td><td>Cell graph and span validity</td></tr>
+<tr><td>Image degradation</td><td>Blur, skew, glare, compression, shadows, low contrast, camera perspective</td><td>Distortion/legibility stratification</td></tr>
+<tr><td>Dense / sparse pages</td><td>Empty, one-line, &gt;capacity, long lines, nested region and cell centers</td><td>Overflow and no-object behavior</td></tr>
+</tbody></table></div>
+<h3>Split and leakage policy</h3><p>Split by originating document and, where possible, issuer/template family—not random crops or lines. All pages and augmentations of one document remain in one split. Keep a frozen final test set, a tuning validation set, and a separate synthetic sanity suite. Record near-duplicate fingerprints. Never tune thresholds on the final test set.</p>
+<h3>Label QA</h3><ul><li>Strict schema validator checks polygon winding, nonzero area, image bounds, stable IDs, normalized Unicode policy, and relation endpoints.</li><li>All table spans must describe a consistent occupancy grid, or be flagged <code>annotation_ambiguous</code> and excluded from grid supervision with a log entry.</li><li>Document reading order is annotated in intended logical order; unannotated relations are distinct from explicit <code>NULL</code>.</li><li>Persist annotation version, source class, license/permission metadata, reviewer, and a checksum. Do not include raw sensitive document images in public logs.</li></ul>
+<p><strong>Augmentations:</strong> apply coupled image/geometry transforms (rotation, crop, warp, scale) with updated polygons, then validate. Photometric changes must not erase critical Khmer diacritics by default. Augmentation strength and probabilities are recorded.</p>
+</section>
+<section data-group="Training" data-title="Training program" id="s12"><span class="sec-id">12 / experimental program</span><h2>Training program</h2>
+<h3>Phased curriculum</h3>
+<div class="tablewrap"><table><thead><tr><th>Phase</th><th>Train / measure</th><th>Exit condition</th></tr></thead><tbody>
+<tr><td>T0 — Baseline recovery</td><td>Clean source, v3 shape/fusion tests, isolated detector/recognizer baselines</td><td>Reproducible commands, deterministic toy convergence, corrected metrics</td></tr>
+<tr><td>T1 — Detection</td><td>Dual-stream typed proposals; table+cell overlap; data tiling</td><td>Stable real/synthetic proposal recall, calibrated false positives</td></tr>
+<tr><td>T2 — OCR</td><td>Matched GT/validated predicted line crops; tokenizer audit; R0/R1/R2</td><td>Finite CTC, valid Khmer marks, CPU recognition benchmark</td></tr>
+<tr><td>T3 — Association</td><td>Containment, reading order, KV, typed relations and nulls</td><td>Graph invariants and measured relation F1</td></tr>
+<tr><td>T4 — Tables</td><td>Cell grid/span supervision, reconstruction and rendering</td><td>Grid validity; TEDS and merged-cell holdout results</td></tr>
+<tr><td>T5 — Joint fine-tuning</td><td>End-to-end scheduled sampling + loss balancing</td><td>Quality/latency/size gates on frozen holdout</td></tr>
+</tbody></table></div>
+<h3>Single-GPU development profile</h3><p>Provide a local profile targeting a 6 GB VRAM NVIDIA laptop GPU: AMP where validated, configurable microbatches, gradient accumulation, pinned input memory if beneficial, optional activation checkpointing, and cached static synthetic assets. Record actual peak VRAM; do not assert that an untested configuration fits.</p>
+<pre><code># Illustrative configuration keys; final values set by pilot run
+model:
+  backbone: prism_v3_anisotropic
+  dim: 160
+  text_proposals: 128     # candidate, subject to corpus percentile
+  region_queries: 64      # candidate, subject to test
+  ocr_encoder: gated_dwconv1d
+  strip_height: 5
+  strip_buckets: [64, 128, 160, 256]
+  vocab_file: assets/vocab-v4.json
+train:
+  device_profile: single_gpu_6gb
+  amp: bf16_if_supported_else_fp16_or_fp32
+  microbatch: tuned_by_peak_vram
+  grad_accum_steps: tuned_for_effective_batch
+  teacher_forcing: scheduled
+  reject_invalid_ctc: true
+  seed: 42
+validation:
+  frozen_split_manifest: data/splits/v1.json
+  thresholds_file: artifacts/calibration-v1.json</code></pre>
+<h3>Required ablations</h3><div class="tablewrap"><table><thead><tr><th>Experiment</th><th>Control</th><th>Change</th><th>Primary question</th></tr></thead><tbody>
+<tr><td>A1</td><td>v3 baseline</td><td>Dual-stream typed proposals only</td><td>Does nested detection improve without hurting line recall?</td></tr>
+<tr><td>A2</td><td>A1</td><td>Physically compact OCR execution</td><td>How much latency is removed simply by skipping empty/non-text slots?</td></tr>
+<tr><td>A3</td><td>A2 + transformer</td><td>Gated Conv1D or hybrid recognizer</td><td>What is the CER/latency Pareto tradeoff?</td></tr>
+<tr><td>A4</td><td>Fixed 160 frames</td><td>Adaptive strip buckets</td><td>Does long-line accuracy improve economically?</td></tr>
+<tr><td>A5</td><td>Heuristic table grid</td><td>Learned grid + constrained solver</td><td>Does TEDS improve on spanning tables?</td></tr>
+<tr><td>A6</td><td>Fully separate sequence blocks</td><td>V3-style shared blocks</td><td>Does parameter sharing justify accuracy/latency effects?</td></tr>
+</tbody></table></div>
+<p>Run matched seeds where feasible and report distributions, not only one favorable score. Each ablation produces a frozen config, code commit, data split hash, checkpoint hash, model-byte count and benchmark JSON.</p>
+</section>
+<section data-group="Validation" data-title="Evaluation and calibration" id="s13"><span class="sec-id">13 / evaluation</span><h2>Evaluation and calibration</h2>
+<div class="tablewrap"><table><thead><tr><th>Dimension</th><th>Metrics</th><th>Breakdowns</th></tr></thead><tbody>
+<tr><td>Character recognition</td><td>CER, WER, exact-line accuracy</td><td>Khmer, English, mixed, length, font, mark/coeng</td></tr>
+<tr><td>Detection</td><td>Recall/precision @ rotated IoU 0.5, 0.75; mAP where useful</td><td>Text, region, cell; nested, long and dense</td></tr>
+<tr><td>Capacity</td><td>Assignment coverage, unmatched GT, capacity overflow</td><td>Per page/stream; not called recall</td></tr>
+<tr><td>Reading order</td><td>Pairwise order accuracy, exact page order, cycle count</td><td>Multicolumn, tables, headers/footers</td></tr>
+<tr><td>Structure</td><td>Relation P/R/F1, tree validity, parent membership</td><td>By edge type, empty/complex documents</td></tr>
+<tr><td>Tables</td><td>TEDS/TEDS-structure, cell-F1, merged-span exactness</td><td>Bordered, borderless, spans, empty cells</td></tr>
+<tr><td>KV</td><td>Exact/normalized value F1, pair-link F1</td><td>Duplicate keys, multilingual fields</td></tr>
+<tr><td>Operational</td><td>CPU p50/p95 latency, pages/s, peak RSS, serialized MB, VRAM</td><td>Resolution, lines/page, tile count, thread count</td></tr>
+<tr><td>Calibration</td><td>PR curve, ECE/Brier for confidence where meaningful</td><td>Detector, relation confidence, OOD/blank pages</td></tr>
+</tbody></table></div>
+<h3>Non-negotiable metric semantics</h3><ul><li>Measure proposal recall using unique GT matched by geometric threshold; separate this from Hungarian assignment coverage.</li><li>Compute CER with published edit-distance conventions and report exact normalization policy; do not hide Khmer mark errors via aggressive cleanup.</li><li>TEDS evaluates table tree similarity; include text-sensitive and structure-only variants so OCR and layout errors are disentangled.</li><li>Report failure rate and rejected/unsupported samples in denominators and counts. A failure must not be removed merely because a batch skipped it.</li><li>Confidence calibration is learned/measured on validation only. <code>sigmoid(logit)</code> alone is not a guarantee of probability calibration.</li></ul>
+<h3>Release gates: proposed, pending baseline lock</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>Proposed criterion</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>G1 — correctness</td><td>100% pass on hard invariant suite; no NaN/inf/invalid CTC silent acceptance</td><td>Hard stop</td></tr>
+<tr><td>G2 — storage</td><td>≤10,000,000 FP32 fused parameter+buffer bytes</td><td>Hard stop</td></tr>
+<tr><td>G3 — OCR</td><td>Khmer and English CER non-regressing against locked v3 trained baseline, with confidence intervals</td><td>Relative gate; no unsupported absolute claim</td></tr>
+<tr><td>G4 — nested structure</td><td>Must improve nested table/line/cell proposal recall without material text-line loss</td><td>Requires held-out real cases</td></tr>
+<tr><td>G5 — speed</td><td>At least 30% reduction in measured p50 CPU end-to-end latency vs v3, with p95 also reported</td><td>Aspirational project target; threshold may be adjusted <em>before</em> final tests</td></tr>
+<tr><td>G6 — fidelity</td><td>Zero invalid table grid overlap; graph validation 100% on exported output</td><td>Structural integrity gate, not accuracy guarantee</td></tr>
+<tr><td>G7 — export</td><td>CPU PyTorch/ONNX parity within documented tolerances and supported runtime</td><td>Target-specific gate</td></tr>
+</tbody></table></div>
+<div class="note warn"><h3>Gate discipline</h3><p>Do not claim the model meets a percentage accuracy target before measuring it. The 30% CPU speed improvement is an engineering objective, not a proven prediction. Lock numeric quality deltas, datasets, and sample counts after the v3 control run and before promotion of the v4 candidate.</p></div>
+</section>
+<section data-group="Validation" data-title="Efficiency and benchmarking" id="s14"><span class="sec-id">14 / efficiency</span><h2>Compute, memory and CPU benchmarking</h2>
+<h3>Baseline arithmetic</h3><p>For v3's two shared sequence blocks with 96 sequences, length 160 and width 160, the estimated OCR sequence-core cost is approximately <strong>7.86 billion MACs</strong> (about 15.7 GFLOPs if reporting two operations per MAC). This is an analytical estimate from the supplied architecture, excluding backbone, sampling, CTC head and postprocessing—not a CPU benchmark.</p>
+<div class="tablewrap"><table><thead><tr><th>Executed sequence count</th><th>V3-style two-block core MACs (estimate)</th><th>Comment</th></tr></thead><tbody>
+<tr><td>96</td><td>7.86 billion</td><td>Worst reference density</td></tr>
+<tr><td>64</td><td>5.24 billion</td><td>Physical compaction yields linear reduction in per-strip work</td></tr>
+<tr><td>16</td><td>1.31 billion</td><td>Illustrative sparse execution</td></tr>
+</tbody></table></div>
+<p><strong>Memory accounting:</strong> report FP32 tensor bytes and checkpoint/export file bytes separately; buffers (including batch-normalization state) can matter. Runtime peak RSS includes activations, memory allocator overhead, thread workspaces, tiles and decoding data structures. FP16/INT8 model variants are optional additional outputs, not a substitute for meeting the required FP32 ceiling.</p>
+<h3>Benchmark protocol</h3><ol><li>Publish CPU model, operating system, runtime/compiler versions, batch size, thread configuration, affinity, precision and power profile.</li><li>Run warmup iterations (minimum 30 for representative shapes) and timed iterations (minimum 100 per test case), reporting p50, p95 and throughput. Increase repetitions when variance is high.</li><li>Separate preprocessing, backbone, detector, recognizer, graph/table decoder and total wall-clock latency. The end-to-end measure must include all enabled stages.</li><li>Use multiple document buckets: blank, 10, 30, 64, 96 and &gt;96 text lines; 768² and higher-resolution tiled pages; documents with/without tables.</li><li>Measure peak RSS, inference parameter bytes, mean selected OCR lines, bucket counts, query count, tile count and all failure/rejection flags.</li><li>Compare v3, v4 transformer-sparse, and v4 Conv1D with equivalent workload/corpus, not cherry-picked images.</li></ol>
+<h3>Performance-oriented implementation rules</h3><ul><li>Avoid per-pixel CPU↔GPU transfers and Python loops in the inference hot path; v3's CPU conversion of all sorted candidates is a specific optimization target.</li><li>Batch grid sampling and recognition by sequence-length bucket; avoid materializing large unused padded tensors.</li><li>Cache immutable positional grids and token tables where safe; do not cache shape-dependent values incorrectly.</li><li>Instrument each stage before introducing more aggressive reparameterization or custom kernels.</li></ul>
+</section>
+<section data-group="Integration" data-title="Export and runtime" id="s15"><span class="sec-id">15 / deployment</span><h2>Inference, export and runtime</h2>
+<h3>Execution graph</h3><pre><code>image → orientation/scale policy → (optional overlapping tiles)
+      → feature extraction → typed proposal generation
+      → calibrated filtering + spatial stitching
+      → compact text-line OCR → text association to region/cell
+      → constrained relation + table decode
+      → schema validation → structured result</code></pre>
+<p>Tiling must not duplicate line text at page boundaries. Stitch proposals using original-image polygons, overlap/sequence evidence and stable instance reconciliation. Preserve per-tile confidence, transforms and source tile IDs for debugging.</p>
+<h3>Supported configurations</h3>
+<div class="tablewrap"><table><thead><tr><th>Target</th><th>Requirement</th><th>Verification</th></tr></thead><tbody>
+<tr><td>PyTorch CPU</td><td>Reference runtime on Linux x86_64</td><td>Full inference, memory/latency and schema tests</td></tr>
+<tr><td>ONNX Runtime CPU</td><td>Primary portable export target; explicit model opset/runtime version</td><td>Export, numerical parity and real CPU benchmark</td></tr>
+<tr><td>GPU development</td><td>Single GPU training/inference diagnostic</td><td>6 GB profile and FP16/FP32 comparisons</td></tr>
+<tr><td>Mobile</td><td>Out of initial support contract</td><td>Separate CoreML/TFLite feasibility investigation</td></tr>
+</tbody></table></div>
+<p>ONNX includes <code>GridSample</code> beginning with opset 16, but operator availability does not prove that every inference runtime accelerates it or matches PyTorch numerically. Choose a fixed export/runtime matrix and test actual operators, dynamic sequence buckets, gather/scatter, graph decoding and fused convolutions.</p>
+<h3>Fusion and numerical parity</h3><ul><li>Preserve v3's FP32-accumulated anisotropic depthwise branch fusion as the starting implementation.</li><li>Run <code>model.eval()</code> and lock batch-normalization statistics before fusion.</li><li>Verify fused/unfused feature outputs and final logits across multiple sizes and precisions; record max absolute/relative error.</li><li>Ensure the fusion operation is idempotent; never silently mutate trainable checkpoints.</li><li>Include tokenizer, class maps, score calibration, image preprocessing and schema version in the deployable artifact manifest.</li></ul>
+<h3>Artifact layout</h3>
+<pre><code>release/
+  model-fp32.onnx
+  model-fp32.pt
+  tokenizer-v4.json
+  labels-v4.json
+  preprocess-v4.json
+  calibration-v4.json
+  schema-v4.json
+  manifest.json
+  benchmarks/
+    cpu-reference.json
+    export-parity.json
+    evaluation.json
+  checksums.sha256</code></pre>
+<div class="note good"><h3>Deployment invariant</h3><p>Given the same input, versioned assets, and deterministic inference profile, PyTorch and ONNX must emit equivalent text/structure within a written tolerance. If a runtime lacks support, the release must report “unsupported” rather than quietly substituting a different model.</p></div>
+</section>
+<section data-group="Integration" data-title="API and output schema" id="s16"><span class="sec-id">16 / interface</span><h2>Python API and document output</h2>
+<h3>Minimal public API</h3>
+<pre><code>class PrismOCR:
+    @classmethod
+    def load(cls, artifact_dir: Path, device: str = "cpu") -&gt; "PrismOCR": ...
+
+    def predict(self, image: ImageLike, options: InferenceOptions | None = None) -&gt; DocumentResult: ...
+    def predict_batch(self, images: list[ImageLike], options: InferenceOptions | None = None) -&gt; list[DocumentResult]: ...
+
+class InferenceOptions:
+    page_resolution: int | None = None
+    allow_tiling: bool = True
+    emit_character_confidence: bool = False
+    return_debug: bool = False
+    output_coordinate_space: Literal["pixels", "normalized"] = "pixels"</code></pre>
+<h3>Canonical JSON response</h3>
+<pre><code>{
+  "schema_version": "4.0",
+  "model_version": "v4.0.0-experiment",
+  "document_id": "doc-001",
+  "image": {"width": 1536, "height": 2176},
+  "lines": [{
+    "id": "l:1", "polygon": [[110,120],[620,120],[620,164],[110,164]],
+    "text": "វិក្កយបត្រ / Invoice", "role": "TITLE",
+    "detector_score": 0.93, "recognition_score": null,
+    "language": "mixed", "parent_id": null, "reading_order": 0
+  }],
+  "regions": [{"id":"r:1","kind":"TABLE","polygon":[[80,300],[1400,300],[1400,980],[80,980]],"parent_id":null}],
+  "cells": [{"id":"c:1","table_id":"r:1","row":0,"col":0,"rowspan":1,"colspan":1,
+             "polygon":[[85,310],[460,310],[460,365],[85,365]],
+             "is_header":true,"line_ids":[]}],
+  "relations": [{"type":"NEXT","source":"l:1","target":null,"score":0.85}],
+  "kv_pairs": [],
+  "reading_order": ["l:1"],
+  "warnings": [],
+  "diagnostics": {"tiles":1,"text_proposals":1,"region_proposals":2,
+                  "overflow":false,"execution_ms":null}
+}</code></pre>
+<p>Values here are illustrative schema examples, not PrismOCR predictions. The canonical response uses IDs instead of positional tensor indices. Scores may be <code>null</code> when unavailable or uncalibrated. <code>execution_ms</code> remains <code>null</code> unless actually timed.</p>
+<h3>Failure and partial-result semantics</h3>
+<div class="tablewrap"><table><thead><tr><th>Code</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>INVALID_IMAGE</code></td><td>Reject unreadable images, unsupported channel count, invalid dimensions</td></tr>
+<tr><td><code>UNSUPPORTED_CHARSET</code></td><td>Output replacement metadata plus OOV count; do not silently drop characters</td></tr>
+<tr><td><code>CAPACITY_OVERFLOW</code></td><td>Attempt tiling or larger profile; otherwise return partial results with warning</td></tr>
+<tr><td><code>TABLE_GRID_CONFLICT</code></td><td>Keep raw cell proposals and conflict list; never emit misleading span HTML as valid</td></tr>
+<tr><td><code>EXPORT_UNSUPPORTED</code></td><td>Fail clearly on unsupported operator/runtime; no hidden fallback</td></tr>
+<tr><td><code>INFERENCE_ERROR</code></td><td>Fail with structured cause, preserve source image and stage metadata only by opt-in</td></tr>
+</tbody></table></div>
+<p>For privacy-sensitive documents, diagnostics shall exclude full raw text and images by default. Logging must be controllable at deployment.</p>
+</section>
+<section data-group="Integration" data-title="Repository and implementation boundaries" id="s17"><span class="sec-id">17 / codebase</span><h2>Repository structure and implementation boundaries</h2>
+<pre><code>prismocr/
+├── pyproject.toml
+├── README.md
+├── configs/{v3_baseline,v4_detection,v4_joint,cpu_benchmark}.yaml
+├── prismocr/
+│   ├── model/{backbone,text_head,region_head,recognizer,graph}.py
+│   ├── geometry/{boxes,transforms,tiling,stitching}.py
+│   ├── matching/{hungarian,quality,assignment}.py
+│   ├── loss/{detection,ocr,relations,grid}.py
+│   ├── decode/{ctc,reading_order,tables,key_values}.py
+│   ├── data/{schemas,unicode,loaders,augment,validate}.py
+│   ├── runtime/{pipeline,onnx,manifest,calibration}.py
+│   └── types.py
+├── scripts/{train,evaluate,benchmark,export,verify}.py
+├── tests/{unit,property,integration,regression,golden}/
+├── assets/{vocab,labels}/
+└── docs/{SPEC-v4,ADR,experiments}/</code></pre>
+<h3>Ownership boundaries</h3><ul><li><code>model/</code> returns structured tensors; it must not emit HTML, handle datasets, or secretly tune thresholds.</li><li><code>matching/</code> is a pure optimization and geometric acceptance layer. The <code>MatchSet</code> is immutable and reused by losses/teacher forcing.</li><li><code>loss/</code> consumes prepared targets, model outputs and immutable match sets; it must not call inference decoders.</li><li><code>decode/</code> converts scored graph/data structures to deterministic domain objects; it never accesses GPU training state.</li><li><code>runtime/</code> owns device selection, preprocessing, tiling, model invocation, metrics, and artifact compatibility checks.</li><li><code>data/</code> owns truth labels, annotation conversion and Unicode policy. No train-test leakage from shared fixtures.</li></ul>
+<h3>CLI contract</h3><pre><code>uv run python scripts/verify.py --config configs/v4_detection.yaml
+uv run python scripts/train.py --config configs/v4_joint.yaml
+uv run python scripts/evaluate.py --checkpoint runs/&lt;id&gt;/best.pt --split test
+uv run python scripts/benchmark.py --runtime pytorch-cpu --threads 4
+uv run python scripts/export.py --checkpoint runs/&lt;id&gt;/best.pt --format onnx</code></pre>
+<p>These are <strong>proposed command interfaces</strong>, not commands confirmed to exist in the supplied implementation. Publish exact command outputs and run manifests when implemented.</p>
+</section>
+<section data-group="Validation" data-title="Verification and test matrix" id="s18"><span class="sec-id">18 / verification</span><h2>Verification and test matrix</h2>
+<p>The v3 built-in <code>__main__</code> checks are not an adequate release suite. Use isolated unit tests, controlled synthetic integration tests, real-document regression sets, property-based checks, and export checks. Each blocking scenario must have a reproducible named fixture.</p>
+<div class="tablewrap"><table><thead><tr><th>Test ID</th><th>Scenario</th><th>Pass condition</th></tr></thead><tbody>
+<tr><td>U-01</td><td>16×16 fractional center (0.5,0.5)</td><td>≥1 positive at actual object class/stream</td></tr>
+<tr><td>U-02</td><td>Two GT centers quantize to same cell</td><td>No hidden loss of GT; collision/overflow explicitly counted</td></tr>
+<tr><td>U-03</td><td>TABLE, CELL, LINE share center</td><td>All three represented and recoverable</td></tr>
+<tr><td>U-04</td><td>Flat 16×16 confidence map and K=96</td><td>No false accepted objects; masks and counts correct</td></tr>
+<tr><td>U-05</td><td>M=0, K=0, M&lt;K, M=K, M&gt;K</td><td>Correct pair count; no exceptions; sensible losses</td></tr>
+<tr><td>U-06</td><td>Hungarian random rectangles + ties</td><td>Cost parity with trusted reference on small matrices</td></tr>
+<tr><td>U-07</td><td>Matched and teacher-forced slot IDs</td><td>Same mapping in box/role/CTC/graph supervision</td></tr>
+<tr><td>U-08</td><td>Predicted boxes all distant from GT</td><td>Assignment coverage may be high; recall@IoU reports zero</td></tr>
+<tr><td>U-09</td><td>CTC 210 tokens, T=32</td><td>Explicit length failure; no zeroed loss or silent truncation</td></tr>
+<tr><td>U-10</td><td>CTC adjacent repeated token</td><td>Correct minimum alignment frame count</td></tr>
+<tr><td>U-11</td><td>OOV currency and Khmer combining marks</td><td>Visible OOV reporting; no dropped characters</td></tr>
+<tr><td>U-12</td><td>Batch with padded and valid proposals</td><td>Padded keys ignored; valid outputs invariant to padding</td></tr>
+<tr><td>U-13</td><td>Batch changes valid OCR node count</td><td>Executed recognizer count matches accepted lines, not Kt</td></tr>
+<tr><td>U-14</td><td>Oriented strip at 0/90/180°, borders</td><td>Geometry aligns with hand-verified pixel coordinates</td></tr>
+<tr><td>U-15</td><td>Graph with cycles and multiple columns</td><td>Deterministic complete order, no duplicate/dropped node</td></tr>
+<tr><td>U-16</td><td>Right-cell link across unrelated table</td><td>Rejected / NULL with reason</td></tr>
+<tr><td>U-17</td><td>Two table cells assigned same origin</td><td>Explicit grid conflict, never overwritten silently</td></tr>
+<tr><td>U-18</td><td>2×3 table with rowspan/colspan and empty cells</td><td>Valid HTML occupancy; no duplicated text; lossless structural JSON</td></tr>
+<tr><td>U-19</td><td>OCR text containing <code>&lt;script&gt;</code> and ampersands</td><td>HTML-escaped output, no executable markup injection</td></tr>
+<tr><td>U-20</td><td>Fused vs unfused and ONNX vs PyTorch</td><td>Within per-stage numeric tolerance; exported artifact runnable</td></tr>
+<tr><td>U-21</td><td>Empty/tiled/high-density images</td><td>Valid response/warnings, coordinate reconciliation and no duplicate text</td></tr>
+<tr><td>U-22</td><td>Repeated seeds and restore checkpoint</td><td>Comparable metrics and optimizer/scheduler state round-trip</td></tr>
+</tbody></table></div>
+<h3>Evidence required for each blocker</h3><ul><li>Test path, seed, tensor/image fixture and exact expected values.</li><li>Clear assertion failure with context; no demonstration based solely on printed outputs.</li><li>At least one integration check through <code>model → matcher → loss.backward()</code> with mixed per-image cardinalities.</li><li>Positive and negative cases for every relation and table rule.</li><li>Test-run metadata and results captured in CI or a reproducible local verification report.</li></ul>
+<div class="note info"><h3>Acceptance principle</h3><p>A toy fixture can prove an invariant but not document accuracy. Only held-out, annotated real Khmer/English documents can establish end-to-end performance. Keep these evidence classes separate in all reports.</p></div>
+</section>
+<section data-group="Delivery" data-title="Release plan and deliverables" id="s19"><span class="sec-id">19 / work breakdown</span><h2>Implementation sequence and acceptance gates</h2>
+<div class="tablewrap"><table><thead><tr><th>Milestone</th><th>Primary implementation</th><th>Required evidence before proceeding</th></tr></thead><tbody>
+<tr><td>M0 — Reference</td><td>Clean v3 source; tokenizer audit; tests; CPU benchmark fixture</td><td>Baseline numbers reproduced or discrepancy recorded</td></tr>
+<tr><td>M1 — Data contract</td><td>Schema, labels, validators, transform/tiling geometry</td><td>Round-trip annotation and leakage checks</td></tr>
+<tr><td>M2 — Detection</td><td>Typed two-head proposals, confidence, masks, matching</td><td>Flat/nested/collision fixtures, real proposal metrics</td></tr>
+<tr><td>M3 — Sparse OCR</td><td>Compact sampler, CTC policy, Conv1D/transformer ablation</td><td>Gradient tests, CER + CPU latency by line count</td></tr>
+<tr><td>M4 — Structure</td><td>Typed graph, order, KV, valid table grid solver</td><td>Graph/table invariants, relation metrics, TEDS</td></tr>
+<tr><td>M5 — Joint model</td><td>Curriculum, dynamic loss weights/schedules, ablations</td><td>Held-out metrics and experiment manifests</td></tr>
+<tr><td>M6 — Release</td><td>Fusion, CPU ONNX export, package, docs</td><td>Weight ceiling, parity, benchmark, audit ledger closure</td></tr>
+</tbody></table></div>
+<h3>Definition of done</h3>
+<ul class="checklist"><li>All P0 findings in the ledger closed with directly linked tests.</li><li>Source code, config, checkpoint, tokenizer, class map and calibration hashes recorded.</li><li>Khmer, English and mixed text measured on a frozen real-document split.</li><li>Proposal recall is geometrically valid and separate from matching coverage.</li><li>Tables serialize into valid occupancy grids and safe HTML.</li><li>CPU performance measured with end-to-end latency and memory, not just model bytes.</li><li>Model artifact satisfies ≤10 MB FP32 raw tensor storage and export parity.</li><li>All unresolved limitations explicitly listed in release notes.</li></ul>
+</section>
+<section data-group="Delivery" data-title="Risks, decisions and open questions" id="s20"><span class="sec-id">20 / governance</span><h2>Risks, decisions and open questions</h2>
+<div class="tablewrap"><table><thead><tr><th>ID</th><th>Decision / risk</th><th>Disposition</th></tr></thead><tbody>
+<tr><td>ADR-01</td><td>Keep v3 anisotropic backbone for initial v4 controlled experiments</td><td><span class="tag keep">Selected for baseline</span></td></tr>
+<tr><td>ADR-02</td><td>Split text-line detection from region/cell instance detection</td><td><span class="tag spec">Proposed</span></td></tr>
+<tr><td>ADR-03</td><td>Remove fixed-K OCR execution; compact by actual accepted lines</td><td><span class="tag spec">Proposed</span></td></tr>
+<tr><td>ADR-04</td><td>Prefer gated Conv1D if held-out CER and CPU latency justify replacement</td><td><span class="tag spec">Experiment-gated</span></td></tr>
+<tr><td>ADR-05</td><td>Use explicit NULL typed relation endpoints and constrained table grids</td><td><span class="tag spec">Proposed</span></td></tr>
+<tr><td>ADR-06</td><td>Reject unaligned CTC targets instead of silently truncating</td><td><span class="tag keep">Required invariant</span></td></tr>
+<tr><td>RISK-01</td><td>Extra region queries may exceed 10 MB budget</td><td>Inventory bytes each ablation; shrink optional parts first</td></tr>
+<tr><td>RISK-02</td><td>Khmer glyph detail lost on full-page resize</td><td>Validate tile scale/character height; choose resolution from evidence</td></tr>
+<tr><td>RISK-03</td><td>Learned grid supervision too sparse</td><td>Start with constrained solver, add head only if data sufficient</td></tr>
+<tr><td>RISK-04</td><td>Runtime export of ragged OCR or graph ops unsupported</td><td>Use staged ONNX encoder + deterministic host decoder if necessary</td></tr>
+<tr><td>RISK-05</td><td>Real-world labels and language mix biased</td><td>Audit sources; dedicated rare-mark/currency/document holdouts</td></tr>
+</tbody></table></div>
+<h3>Open questions to resolve from experiments</h3><ul><li>What are 95th/99th-percentile text-line and region counts on the actual dataset? This determines <code>Kt</code>, <code>Kr</code> and tiling defaults.</li><li>How small can the recognizer be without worsening Khmer combining-mark CER? Compare R0/R1/R2.</li><li>Does text-line detection at stride-4 justify its added compute over stride-8 with tiling?</li><li>Are learned grid indices necessary, or can a constrained solver plus typed adjacency reach required table accuracy?</li><li>Which CPU runtime achieves best total latency with actual oriented sampling and sparse batches?</li></ul>
+<p>Do not freeze answers by intuition. Each question needs an owner, experiment ID, held-out measure and a documented decision.</p>
+</section>
+<section data-group="Delivery" data-title="Reference material and provenance" id="s21"><span class="sec-id">21 / references</span><h2>Reference material and provenance</h2>
+<h3>Primary user-provided evidence</h3><ol><li><strong>PrismOCR v3 remediation report</strong>, supplied as <em>Pasted markdown(1).md</em> (14 Oct 2026): implementation sketch, audit ledger, targeted verification claims, tensor shapes and reported 1,524,997 fused parameters.</li><li><strong>Review: UniDoc-Nano → OmniDoc-Nano → PrismOCR v2</strong>, included within the same pasted file: architectural critique, 7.86B sequence-core MAC estimate, supervision blockers and recommended ablations.</li><li><strong>Follow-up v3 technical review in the conversation</strong>: flagged invalid “proposal recall”, persistent OCR cost, padded attention, missing local-peak validity, table collision handling and vocabulary coverage.</li></ol>
+<h3>External technical references</h3><ol><li><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.ctc_loss" rel="noopener noreferrer" target="_blank">PyTorch — <code>torch.nn.functional.ctc_loss</code></a>: input-length contracts and <code>zero_infinity</code> behavior.</li><li><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.activation.MultiheadAttention.html" rel="noopener noreferrer" target="_blank">PyTorch — <code>MultiheadAttention</code></a>: key-padding mask semantics for padded sequence inputs.</li><li><a href="https://onnx.ai/onnx/operators/onnx__GridSample.html" rel="noopener noreferrer" target="_blank">ONNX — GridSample operator</a>: normalized-grid sampling and opset lineage.</li><li><a href="https://arxiv.org/abs/1911.10683" rel="noopener noreferrer" target="_blank">Zhong et al. — Image-based table recognition: data, model, and evaluation</a>: PubTabNet and TEDS framing.</li><li><a href="https://arxiv.org/abs/2208.00385" rel="noopener noreferrer" target="_blank">Kumar &amp; Bhatt — Evaluating Table Structure Recognition: A New Perspective</a>: TEDS-related structural evaluation limitations and IoU variation.</li></ol>
+<div class="note info"><h3>Evidence boundary</h3><p>The requirements, schedules, interfaces, release gates and proposed architecture are <strong>new design decisions</strong>, not claims that the supplied v3 implementation already satisfies them. The source's test outcomes are described as reported unless independently checked. Engineering values labeled “candidate”, “illustrative”, or “aspirational” must be finalized from reproducible measurements.</p></div>
+</section>
+<section data-group="V3 / V3.1 archive" data-title="Technical annex: scope and caveats" id="v3-annex-overview">
+<span class="sec-id">A0 / technical annex</span><h2>Annex A — Complete v3 / v3.1 technical record</h2>
+<p>This annex embeds the full technical content of <strong>PrismOCR v3 / v3.1 — Complete Engineering &amp; Verification Specification</strong> (source document), including its ten-item audit ledger, architectural analysis, exact math, Khmer line sampling observations, interactive calculator, reference PyTorch module, and training roadmap.</p>
+<div class="note warn"><h3>Historical, not current design authority</h3><p>References in this annex to “patched,” “training ready,” “syntax verified,” or “resolved” are <strong>claims of the original v3.1 document</strong>. They do not demonstrate end-to-end model correctness or guarantee v4 readiness. Conflicting implementation prescriptions are superseded by <a href="#integration-guide">the decision map</a> and the v4 contract above.</p></div>
+<p class="annex-links"><a href="#exec-summary">A1 Executive record</a><a href="#arch-evolution">A2 Architecture evolution</a><a href="#audit-ledger">A3 Audit ledger</a><a href="#deep-dive-blockers">A4 Blockers</a><a href="#compute-calculator">A5 MAC calculator</a><a href="#math-spec">A6 Math</a><a href="#khmer-verification">A7 Khmer study</a><a href="#pytorch-impl">A8 Source code</a><a href="#training-roadmap">A9 Training</a></p>
+</section><div aria-label="Complete PrismOCR v3 and v3.1 legacy specification annex" class="legacy-v3"><section class="hero legacy-section" data-group="V3 / V3.1 archive" data-title="Original executive audit synthesis" id="exec-summary"><span class="sec-id">A1 / v3.1 historical reference</span>
+<div class="hero-top">
+<span class="pill pill-teal">Fused Weights: 6.10 MB FP32 (5.82 MiB)</span>
+<span class="pill pill-blue">512-Class Khmer + English CTC</span>
+<span class="pill pill-green">All 5 v2 Training Crashes Resolved</span>
+<span class="pill pill-amber">4 Cross-Audit Blockers Patched in v3.1</span>
+</div>
+<h2>A1 — Original v3/v3.1 executive audit synthesis</h2>
+<p>
+        This specification synthesizes the <strong>PrismOCR v3 implementation ledger</strong> (Finding 1) with the
+        <strong>independent readiness &amp; computational audit</strong> (Finding 2). While PrismOCR v3 resolved all five
+        supervision and matching crashes from v2 (fractional center zero-positives, <code>M != K</code> teacher-forcing crashes,
+        plateau duplicate proposals, silent zero-loss CTC overflows, and <code>M &gt; K</code> greedy assignment failures),
+        cross-examination exposed <strong>four remaining architectural and implementation blockers</strong> that must be patched
+        before launching full-scale Khmer/English training.
+      </p>
+<div class="kpi-grid">
+<div class="kpi-card">
+<div class="kpi-label">Fused Inference Params</div>
+<div class="kpi-val">1,525,255</div>
+<div class="kpi-sub">6.10 MB FP32 (3.90 MB under 10 MB budget)</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Unfiltered OCR Workload</div>
+<div class="kpi-val">9.15B MACs</div>
+<div class="kpi-sub">7.89B SeqBlocks + 1.26B CTC head at K=96</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Active-Gated OCR Workload</div>
+<div class="kpi-val">1.91B MACs</div>
+<div class="kpi-sub">79% compute reduction at K_active=20 lines</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Khmer CTC Alignment Margin</div>
+<div class="kpi-val">3.5× Budget</div>
+<div class="kpi-sub">40–45 min frames vs. L=160 strip length</div>
+</div>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Architecture progression and footprint" id="arch-evolution"><span class="sec-id">A2 / v3.1 historical reference</span>
+<h2>A2 — Architecture Progression Fits Within the 10 MB FP32 Budget</h2>
+<p>
+        Across five iterations, separating global structural graph reasoning (stride 16) from high-resolution oriented character
+        recognition (stride 4+8 neck with <code>P_h = 5 × L = 160</code> sampling) while sharing the anisotropic vision backbone
+        achieved the target footprint with 3.90 MB of FP32 headroom to spare.
+      </p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Iteration</th>
+<th>FP32 Footprint</th>
+<th>Fused Params</th>
+<th>Key Architectural Milestone</th>
+<th>Readiness Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>UniDoc-Nano</strong></td>
+<td><code>15.27 MB</code></td>
+<td>~3.82M</td>
+<td>Initial unified detector + recognizer prototype</td>
+<td><span class="pill pill-red">Over 10 MB budget; unfinished OCR sampler</span></td>
+</tr>
+<tr>
+<td><strong>OmniDoc-Nano</strong></td>
+<td><code>7.45 MB</code></td>
+<td>~1.86M</td>
+<td>Aggressive channel pruning across backbone</td>
+<td><span class="pill pill-amber">Under budget; incomplete relational heads</span></td>
+</tr>
+<tr>
+<td><strong>PrismOCR v1</strong></td>
+<td><code>5.93 MB</code></td>
+<td>~1.48M</td>
+<td>Shared <code>DualModeSeqBlock</code> + raw UTF-8 byte CTC</td>
+<td><span class="pill pill-red">1D centerline crop misses Khmer diacritics; 3 bytes/char</span></td>
+</tr>
+<tr>
+<td><strong>PrismOCR v2</strong></td>
+<td><code>6.10 MB</code></td>
+<td>1,524,997</td>
+<td>2D <code>5×160</code> oriented sampler + <code>CharTokenizer512</code> + FP32 BN fusion</td>
+<td><span class="pill pill-amber">5 P0/P1 supervision &amp; matching blockers</span></td>
+</tr>
+<tr>
+<td><strong>PrismOCR v3</strong></td>
+<td><code>6.10 MB</code></td>
+<td>1,524,997</td>
+<td>Snapped GT peaks, Hungarian matcher, Chebyshev NMS, CTC length guard</td>
+<td><span class="pill pill-amber">Fixes v2 crashes; introduces hierarchy peak self-suppression</span></td>
+</tr>
+<tr>
+<td><strong>PrismOCR v3.1 (Spec)</strong></td>
+<td><code>6.10 MB</code></td>
+<td>1,525,255</td>
+<td>3-Tier hierarchy heatmap, Active-Slot OCR gating, masked struct attention</td>
+<td><span class="pill pill-green">Training-ready baseline specification</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Ten-finding resolution ledger" id="audit-ledger"><span class="sec-id">A3 / v3.1 historical reference</span>
+<h2>A3 — Unified Audit Resolution Ledger (v2 → v3 → v3.1 Patched Spec)</h2>
+<div class="filter-bar">
+<button class="btn active" onclick="filterLedger('all', this)">All Findings (10)</button>
+<button class="btn" onclick="filterLedger('v3-fixed', this)">Fixed in v3 (6)</button>
+<button class="btn" onclick="filterLedger('v31-patched', this)">Exposed by Review &amp; Patched in v3.1 (4)</button>
+</div>
+<div class="table-wrap">
+<table id="ledger-table">
+<thead>
+<tr>
+<th>Priority</th>
+<th>Defect / Audit Finding</th>
+<th>Root Cause in v2 / v3</th>
+<th>Exact Fix in v3 / v3.1 Specification</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-red">P0</span></td>
+<td><strong>Zero positive heatmap targets at fractional centers</strong></td>
+<td>Continuous center <code>c_x = 0.5 × 15 = 7.5</code> peaks at <code>exp(-0.25) = 0.7788 &lt; 0.99</code>, leaving 0 positive pixels for focal loss.</td>
+<td>Snap each GT center to <code>(round(cx), round(cy))</code>, center the Gaussian at <code>(ix, iy)</code>, and clamp <code>target_hm[b, tier, iy, ix] = 1.0</code>.</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-red">P0</span></td>
+<td><strong>Teacher forcing crashes when <code>M != K</code> &amp; misaligns nodes</strong></td>
+<td><code>sample_boxes = gt_boxes</code> overwrote <code>(B, K, 6)</code> with <code>(B, M, 6)</code> without matching GT index <code>m</code> to proposal <code>k</code>.</td>
+<td><code>align_teacher_forced_boxes()</code> runs Hungarian matching and interpolates only matched slots <code>(1 - α)pred[k] + αgt[m]</code>.</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+<tr data-cat="v31-patched">
+<td><span class="pill pill-red">P0</span></td>
+<td><strong>Collide-then-suppress contradiction on overlapping/adjacent objects</strong></td>
+<td>In v3, a single-channel heatmap moves colliding GT centers (e.g., <code>TABLE</code> + central <code>TABLE_CELL</code> at <code>(8,8)</code>) to <code>(7,7)</code> (Chebyshev dist 1), which v3's <code>3×3</code> Chebyshev NMS immediately suppresses!</td>
+<td>Split <code>node_heatmap</code> into <strong>3 hierarchy tiers</strong> (Tier 0: Containers, Tier 1: Cells/KV, Tier 2: Text Lines) and apply Chebyshev suppression only to plateau ties (<code>|p_i - p_j| ≤ 1e-4</code>) or weak shoulders (<code>p_nb &lt; 0.5</code>).</td>
+<td><span class="pill pill-teal">Patched in v3.1</span></td>
+</tr>
+<tr data-cat="v31-patched">
+<td><span class="pill pill-red">P0</span></td>
+<td><strong>9.15B MACs (18.29 GFLOPs) unfiltered OCR sequence bottleneck</strong></td>
+<td>v2 and v3 execute <code>sample_oriented_strips</code>, 2 Transformer blocks (<code>7.89B MACs</code>), and <code>char_ctc_head</code> (<code>1.26B MACs</code>) on all <code>K=96</code> slots, including <code>PAD</code>, <code>TABLE</code>, and masked slots.</td>
+<td>Gate OCR execution via <code>ocr_mask</code> so only matched text slots (training) or <code>proposal_mask &amp; (score ≥ thresh) &amp; (role not in {PAD, TABLE})</code> (inference) run through the OCR sampler and sequence blocks.</td>
+<td><span class="pill pill-teal">Patched in v3.1</span></td>
+</tr>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-amber">P1</span></td>
+<td><strong>3×3 NMS admits plateau duplicates &amp; unmasked non-peaks</strong></td>
+<td><code>p == max_pool2d(p, 3, 1, 1)</code> is True across every pixel of a flat plateau; unused slots were filled without a boolean mask.</td>
+<td>2D stride-2 lattice tie-breaker <code>1e-6 · I(y%2==0 ∧ x%2==0) + 1e-9(yW+x)</code> + plateau suppression and explicit <code>proposal_mask (B, K)</code>.</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-amber">P1</span></td>
+<td><strong>Invalid CTC targets silently contribute 0.0 loss</strong></td>
+<td><code>zero_infinity=True</code> masked <code>inf</code> losses when <code>L_chars + R_repeats &gt; T_frames</code> (e.g., 200 chars on 64 frames).</td>
+<td>Added <code>min_ctc_frames()</code>, set <code>zero_infinity=False</code>, enforced <code>strict_ctc_length</code> validation (or prefix truncation via <code>truncate_to_ctc_budget</code>).</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-amber">P1</span></td>
+<td><strong>Greedy assignment raises <code>StopIteration</code> when <code>M &gt; K</code> or <code>M = 0</code></strong></td>
+<td>Greedy <code>next(k for k in ...)</code> exhausted proposals when <code>M &gt; K_valid</code> and lacked empty-page guards.</td>
+<td>Dependency-free rectangular Jonker-Volgenant <code>HungarianMatcher.assign()</code> handling <code>M=0</code>, <code>M ≤ K</code>, and <code>M &gt; K</code>.</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+<tr data-cat="v31-patched">
+<td><span class="pill pill-amber">P1</span></td>
+<td><strong>Unmasked dummy slots pollute structural self-attention &amp; loss</strong></td>
+<td>When <code>&lt; K</code> peaks exist, v3 pads <code>topk_idx</code> with index <code>0</code> (corner <code>(0,0)</code>) and runs <code>MultiheadAttention</code> and <code>cross_entropy</code> without masking <code>~proposal_mask</code>.</td>
+<td>Pass <code>key_padding_mask=~proposal_mask</code> into <code>DualModeSeqBlock(mode="struct")</code> and set <code>ignore_index=-100</code> on <code>~proposal_mask</code> in role and relation losses.</td>
+<td><span class="pill pill-teal">Patched in v3.1</span></td>
+</tr>
+<tr data-cat="v31-patched">
+<td><span class="pill pill-amber">P1</span></td>
+<td><strong>Unnormalized <code>(sin θ, cos θ)</code> in box regression &amp; corrupted code operators</strong></td>
+<td><code>boxes[..., 4:6]</code> stored raw linear outputs (normalized only inside <code>sample_oriented_strips</code>), and the v3 text listing had 15 stripped <code>*</code> and <code>-</code> operators.</td>
+<td>Normalize <code>raw_box[..., 4:6]</code> via <code>F.normalize(..., dim=-1)</code> directly in <code>boxes</code> construction and restore all 15 arithmetic operators (verified via <code>ast.parse</code>).</td>
+<td><span class="pill pill-teal">Patched in v3.1</span></td>
+</tr>
+<tr data-cat="v3-fixed">
+<td><span class="pill pill-blue">P2</span></td>
+<td><strong>Decoder ignores <code>right_probs</code>, skips <code>VALUE</code> role check, repeats merged cells</strong></td>
+<td>Channel 3 was unused; KV linked arbitrary target roles; HTML/Markdown table output duplicated text across spanned cells.</td>
+<td><code>reconstruct_tables()</code> splits horizontal intervals using <code>right_probs</code>, emits <code>rowspan</code>/<code>colspan</code> HTML, and validates <code>role == "VALUE"</code>.</td>
+<td><span class="pill pill-green">Fixed in v3</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Cross-audit blockers and remedies" id="deep-dive-blockers"><span class="sec-id">A4 / v3.1 historical reference</span>
+<h2>A4 — Deep-Dive on Cross-Finding Blockers &amp; v3.1 Architectural Remedies</h2>
+<div class="two-col">
+<div class="callout callout-danger">
+<div class="callout-title">Blocker A: Collide-Then-Suppress Heatmap Paradox in v3</div>
+<p>
+            Consider a <code>TABLE</code> and its central <code>TABLE_CELL</code> both centered at <code>(0.5, 0.5)</code> on a
+            <code>16×16</code> grid. In v3's single-channel <code>render_gt_heatmap</code>, Box 0 snaps to <code>(8, 8)</code>
+            and Box 1 is displaced to the nearest free cell <code>(7, 7)</code>—which sits at <strong>Chebyshev distance 1</strong>
+            (<code>max(|8-7|, |8-7|) = 1</code>). Because v3's <code>select_non_duplicate_peaks</code> unconditionally suppresses all
+            neighbors with Chebyshev distance <code>≤ 1</code>, <strong>even an oracle predictor outputting <code>heat_probs == target_hm</code>
+            suffers a guaranteed false negative on Box 1</strong>.
+          </p>
+<p style="margin-bottom:0;">
+<strong>v3.1 Fix:</strong> <code>node_heatmap</code> outputs <code>C = 3</code> hierarchy channels (Tier 0: Containers
+            <code>TABLE/HEADER/FOOTER</code>; Tier 1: Sub-regions <code>TABLE_CELL/KEY/VALUE/LIST_ITEM</code>; Tier 2: Text Lines)
+            added with a learned <code>tier_embed</code> (only +578 params). Within each tier, Chebyshev suppression only suppresses
+            flat plateau ties (<code>|p_c - p_n| ≤ 1e-4</code>) or weak shoulders (<code>p_n &lt; 0.5</code>).
+          </p>
+</div>
+<div class="callout callout-warn">
+<div class="callout-title">Blocker B: 9.15B MACs Unfiltered OCR Sequence Core</div>
+<p>
+            At <code>K = 96, L = 160, D = 160</code>, each <code>DualModeSeqBlock(mode="ocr")</code> performs
+            <code>12.29M</code> MACs for <code>ocr_dw1d</code>, <code>1,572.86M</code> MACs for QKV/Out projections,
+            <code>786.43M</code> MACs for attention matrices, and <code>1,572.86M</code> MACs for the FFN =
+            <strong>3.944B MACs per block</strong> (<strong>7.889B MACs</strong> across 2 blocks), plus <strong>1.258B MACs</strong>
+            in <code>char_ctc_head</code> = <strong>9.147B MACs (18.29 GFLOPs)</strong>.
+          </p>
+<p style="margin-bottom:0;">
+<strong>v3.1 Fix:</strong> Because <code>proposal_mask</code> and <code>role_logits</code> are computed <em>before</em>
+            the OCR branch, v3.1 indexes <code>sample_oriented_strips</code> and the OCR Transformer only on active text-bearing
+            proposals (<code>ocr_mask</code>), cutting average inference MACs by <strong>65–85%</strong> with zero parameter changes.
+          </p>
+</div>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Interactive OCR MAC calculator" id="compute-calculator"><span class="sec-id">A5 / v3.1 historical reference</span>
+<h2>A5 — Interactive Sequence-Core MAC &amp; Latency Estimator</h2><div class="note info"><h3>Analytical cost model, not a benchmark</h3><p>Results estimate arithmetic for the legacy architecture and a selected active sequence count. They exclude full detection, feature sampling, decoding, memory traffic and wall-clock effects; no observed inference latency is implied.</p></div>
+<p>
+        Use the controls below to inspect the exact MACs and GFLOPs of the OCR sequence recognizer across active proposal counts
+        (<code>K_active</code>), strip lengths (<code>L</code>), and sequence encoder architectures.
+      </p>
+<div class="calc-panel">
+<div class="calc-controls">
+<div class="control-group">
+<label><span>Active Text Proposals (K_active)</span> <span id="lbl-k">24 / 96</span></label>
+<input id="inp-k" max="96" min="1" oninput="updateCalc()" type="range" value="24"/>
+</div>
+<div class="control-group">
+<label><span>CTC Strip Length (L frames)</span> <span id="lbl-l">160</span></label>
+<input id="inp-l" max="320" min="32" oninput="updateCalc()" step="16" type="range" value="160"/>
+</div>
+<div class="control-group">
+<label><span>Hidden Dimension (D)</span> <span id="lbl-d">160</span></label>
+<input id="inp-d" max="256" min="96" oninput="updateCalc()" step="32" type="range" value="160"/>
+</div>
+<div class="control-group">
+<label><span>Sequence Architecture</span></label>
+<select id="inp-arch" onchange="updateCalc()">
+<option selected="" value="gated_tf">v3.1 Active-Gated Transformer (K_active only)</option>
+<option value="unfiltered_tf">v2 / v3 Unfiltered Transformer (All K=96 slots)</option>
+<option value="gated_conv">Ablation: Gated Depthwise-Separable Conv1D (K_active)</option>
+</select>
+</div>
+</div>
+<div class="kpi-grid">
+<div class="kpi-card">
+<div class="kpi-label">Sequence Encoder MACs</div>
+<div class="kpi-val" id="out-seq-macs">1.97B</div>
+<div class="kpi-sub" id="out-seq-sub">2 × DualModeSeqBlock (mode="ocr")</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">512-Way CTC Head MACs</div>
+<div class="kpi-val" id="out-ctc-macs">0.31B</div>
+<div class="kpi-sub">Linear(D → 512) over active strips</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Total OCR Branch Compute</div>
+<div class="kpi-val" id="out-total-macs">2.29B MACs</div>
+<div class="kpi-sub" id="out-total-gflops">4.57 GFLOPs (2 ops/MAC)</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Compute Savings vs. v2/v3</div>
+<div class="kpi-val" id="out-savings" style="color: var(--success);">75.0% Saved</div>
+<div class="kpi-sub" id="out-savings-sub">Compared to 9.15B unfiltered baseline</div>
+</div>
+</div>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Mathematical formulation" id="math-spec"><span class="sec-id">A6 / v3.1 historical reference</span>
+<h2>A6 — Formal Mathematical Specification (PrismOCR v3.1)</h2>
+<h3>6.1 Precision-Safe Anisotropic Reparameterization (<code>AnisotropicRepDW</code>)</h3>
+<p>
+        During training, each depthwise stage sums four parallel branches (<code>3×3</code>, horizontal <code>1×7</code> for long
+        Khmer words, vertical <code>3×1</code> for stacked <em>coeng</em> subscripts and superscript vowels, and batch-normalized identity).
+        At inference, all four branches are fused in FP32 before casting to target precision:
+      </p>
+<div class="math-block">
+        K_fused[c, 0, :, :] = Pad_3x7(W_3x3 · γ_3x3 / σ_3x3) + Pad_3x7(W_1x7 · γ_1x7 / σ_1x7) + Pad_3x7(W_3x1 · γ_3x1 / σ_3x1) + Pad_3x7(I_1x1 · γ_id / σ_id)
+      </div>
+<h3>6.2 3-Tier Hierarchy-Aware Heatmap &amp; Plateau-Conditional Peak Selection</h3>
+<p>
+        Each ground-truth object <code>m</code> with role <code>r_m</code> is mapped to its structural tier
+        <code>c_m = Tier(r_m) ∈ {0, 1, 2}</code> and integer grid coordinate
+        <code>(i_x, i_y) = (round(x_m(W_16 - 1)), round(y_m(H_16 - 1)))</code>:
+      </p>
+<div class="math-block">
+        H*_{b, c, y, x} = max_{m : Tier(r_m) = c} exp( -((x - i_{x,m})^2 + (y - i_{y,m})^2) / (2 σ_m^2) ),    H*_{b, c_m, i_{y,m}, i_{x,m}} = 1.0
+      </div>
+<h3>6.3 Rectangular Hungarian Matching &amp; Aligned Teacher Forcing</h3>
+<p>
+        Over valid proposals <code>V_b = {k : proposal_mask[b, k] = True}</code>, the rectangular cost matrix
+        <code>C ∈ R^{M_b × |V_b|}</code> incorporates spatial anchor distance, L1 box distance, confidence score, and hierarchy-tier agreement:
+      </p>
+<div class="math-block">
+        C_{m, k} = 2.0 ||p^gt_m - a_k||_2 + 1.0 ||b^gt_m - b_hat_k||_1 - 0.25 s_hat_k + 0.5 · I(Tier(r^gt_m) != tier_k)
+      </div>
+<div class="math-block">
+        b_tilde_{b, k_r} = (1 - α) b_hat_{b, k_r} + α b^gt_{b, m_r}    for matched pairs (m_r, k_r), preserving shape (B, K, 6)
+      </div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Khmer glyph and five-row study" id="khmer-verification"><span class="sec-id">A7 / v3.1 historical reference</span>
+<h2>A7 — Empirical Khmer Glyph Rendering &amp; 5-Row Sampling Study</h2>
+<p>
+        Measured on a <code>768 × 768</code> bilingual Khmer/English tax invoice rendered with <code>NotoSansKhmer-Regular.ttf</code>
+        and <code>NotoSansKhmer-Bold.ttf</code> across the 5 vertical sampling rows (<code>y_s ∈ {-1.0, -0.5, 0.0, +0.5, +1.0}</code>):
+      </p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>Role</th>
+<th>Rendered Bilingual Sample</th>
+<th>Box (W×H px)</th>
+<th>Chars (Min CTC)</th>
+<th style="min-width: 240px;">5-Row Vertical Ink Density (r0..r4)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Node 0</code></td>
+<td><span class="pill pill-blue">TITLE</span></td>
+<td>ព្រះរាជាណាចក្រកម្ពុជា / KINGDOM...</td>
+<td><code>599 × 35</code></td>
+<td><code>43 (43f)</code></td>
+<td>
+<div class="bar-row"><span>r0</span><div class="bar-track"><div class="bar-fill" style="width:77.8%"></div></div><span>0.389</span></div>
+<div class="bar-row"><span>r1</span><div class="bar-track"><div class="bar-fill" style="width:79.4%"></div></div><span>0.397</span></div>
+<div class="bar-row"><span>r2</span><div class="bar-track"><div class="bar-fill" style="width:83.8%"></div></div><span>0.419</span></div>
+<div class="bar-row"><span>r3</span><div class="bar-track"><div class="bar-fill" style="width:7.2%"></div></div><span>0.036</span></div>
+<div class="bar-row"><span>r4</span><div class="bar-track"><div class="bar-fill" style="width:1.4%"></div></div><span>0.007</span></div>
+</td>
+</tr>
+<tr>
+<td><code>Node 2</code></td>
+<td><span class="pill pill-teal">KEY</span></td>
+<td>ឈ្មោះអតិថិជន (Customer):</td>
+<td><code>232 × 26</code></td>
+<td><code>24 (24f)</code></td>
+<td>
+<div class="bar-row"><span>r0</span><div class="bar-track"><div class="bar-fill" style="width:22.0%"></div></div><span>0.110</span></div>
+<div class="bar-row"><span>r1</span><div class="bar-track"><div class="bar-fill" style="width:56.6%"></div></div><span>0.283</span></div>
+<div class="bar-row"><span>r2</span><div class="bar-track"><div class="bar-fill" style="width:55.4%"></div></div><span>0.277</span></div>
+<div class="bar-row"><span>r3</span><div class="bar-track"><div class="bar-fill" style="width:63.4%"></div></div><span>0.317</span></div>
+<div class="bar-row"><span>r4</span><div class="bar-track"><div class="bar-fill" style="width:4.2%"></div></div><span>0.021</span></div>
+</td>
+</tr>
+<tr>
+<td><code>Node 3</code></td>
+<td><span class="pill pill-green">VALUE</span></td>
+<td>ក្រុមហ៊ុន មេគង្គ ឌីជីថល (Mekong...)</td>
+<td><code>397 × 27</code></td>
+<td><code>44 (45f)</code></td>
+<td>
+<div class="bar-row"><span>r0</span><div class="bar-track"><div class="bar-fill" style="width:21.0%"></div></div><span>0.105</span></div>
+<div class="bar-row"><span>r1</span><div class="bar-track"><div class="bar-fill" style="width:55.2%"></div></div><span>0.276</span></div>
+<div class="bar-row"><span>r2</span><div class="bar-track"><div class="bar-fill" style="width:53.4%"></div></div><span>0.267</span></div>
+<div class="bar-row"><span>r3</span><div class="bar-track"><div class="bar-fill" style="width:50.8%"></div></div><span>0.254</span></div>
+<div class="bar-row"><span>r4</span><div class="bar-track"><div class="bar-fill" style="width:5.2%"></div></div><span>0.026</span></div>
+</td>
+</tr>
+<tr>
+<td><code>Node 6</code></td>
+<td><span class="pill pill-amber">TABLE_CELL</span></td>
+<td>បរិយាយមុខទំនិញ / Item Description</td>
+<td><code>545 × 27</code></td>
+<td><code>45 (45f)</code></td>
+<td>
+<div class="bar-row"><span>r0</span><div class="bar-track"><div class="bar-fill" style="width:27.8%"></div></div><span>0.139</span></div>
+<div class="bar-row"><span>r1</span><div class="bar-track"><div class="bar-fill" style="width:79.8%"></div></div><span>0.399</span></div>
+<div class="bar-row"><span>r2</span><div class="bar-track"><div class="bar-fill" style="width:78.0%"></div></div><span>0.390</span></div>
+<div class="bar-row"><span>r3</span><div class="bar-track"><div class="bar-fill" style="width:80.8%"></div></div><span>0.404</span></div>
+<div class="bar-row"><span>r4</span><div class="bar-track"><div class="bar-fill" style="width:5.0%"></div></div><span>0.025</span></div>
+</td>
+</tr>
+<tr>
+<td><code>Node 9</code></td>
+<td><span class="pill pill-amber">TABLE_CELL</span></td>
+<td>សេវាកម្មវិភាគឯកសារ OCR (Doc...)</td>
+<td><code>391 × 26</code></td>
+<td><code>40 (41f)</code></td>
+<td>
+<div class="bar-row"><span>r0</span><div class="bar-track"><div class="bar-fill" style="width:19.4%"></div></div><span>0.097</span></div>
+<div class="bar-row"><span>r1</span><div class="bar-track"><div class="bar-fill" style="width:60.2%"></div></div><span>0.301</span></div>
+<div class="bar-row"><span>r2</span><div class="bar-track"><div class="bar-fill" style="width:59.6%"></div></div><span>0.298</span></div>
+<div class="bar-row"><span>r3</span><div class="bar-track"><div class="bar-fill" style="width:67.0%"></div></div><span>0.335</span></div>
+<div class="bar-row"><span>r4</span><div class="bar-track"><div class="bar-fill" style="width:4.2%"></div></div><span>0.021</span></div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="Complete v3.1 PyTorch reference" id="pytorch-impl"><span class="sec-id">A8 / v3.1 historical reference</span>
+<h2>A8 — Complete, Syntax-Verified PyTorch Implementation (PrismOCR v3.1 Patched)</h2><div class="note warn"><h3>Compatibility warning — v3.1 reference only</h3><p>This archived implementation targets a three-tier unified proposal head and fixed v3-era tensor interfaces. It <strong>does not</strong> implement v4's separate typed text/region streams, one immutable MatchSet, corpus-derived vocabulary policy, NULL-aware document graph or complete v4 export/runtime contract. Review and port individual components; do not label this code v4.</p></div>
+<p>
+        All 15 corrupted operators from the pasted v3 source have been repaired and verified with Python's <code>ast.parse()</code>.
+        This implementation includes the 3-tier hierarchy-aware proposal head, active-slot OCR gating, masked structural self-attention,
+        and normalized orientation regression.
+      </p>
+<div class="code-header">
+<span><code>prism_ocr_v3_1_patched.py</code> — AST-Verified Self-Contained PyTorch Module</span>
+<button class="btn" id="copy-btn" onclick="copyCode()">Copy Full Python Code</button>
+</div>
+<pre class="code-box" id="python-source">from typing import Any, Dict, List, Optional, Tuple, Union
+import heapq
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# ============================================================================
+# 1. Explicit 512-Class Khmer + English + Multilingual Character Tokenizer
+# ============================================================================
+class CharTokenizer512:
+    """
+    Deterministic 512-class Unicode Character Vocabulary for CTC.
+    - Index 0       : &lt;BLANK&gt; (strictly reserved for CTC blank)
+    - Index 1       : &lt;UNK&gt;
+    - Index 2..96   : Printable ASCII (U+0020..U+007E, 95 chars)
+    - Index 97..224 : Full Khmer Unicode Block (U+1780..U+17FF, 128 chars)
+    - Index 225..256: Khmer Symbols Block (U+19E0..U+19FF, 32 chars)
+    - Index 257..511: Latin-1 Supplement, General Punctuation &amp; Currency (255 chars)
+    """
+
+    def __init__(self):
+        self.id_to_char: List[str] = ["&lt;BLANK&gt;", "&lt;UNK&gt;"]
+        for cp in range(0x0020, 0x007F):
+            self.id_to_char.append(chr(cp))
+        for cp in range(0x1780, 0x1800):
+            self.id_to_char.append(chr(cp))
+        for cp in range(0x19E0, 0x1A00):
+            self.id_to_char.append(chr(cp))
+        for cp in range(0x00A0, 0x0160):
+            if len(self.id_to_char) &lt; 512:
+                self.id_to_char.append(chr(cp))
+        for cp in range(0x2000, 0x2070):
+            if len(self.id_to_char) &lt; 512:
+                self.id_to_char.append(chr(cp))
+        assert len(self.id_to_char) == 512
+        self.char_to_id: Dict[str, int] = {
+            ch: idx for idx, ch in enumerate(self.id_to_char) if idx &gt;= 2
+        }
+        self.blank_id = 0
+        self.unk_id = 1
+
+    def encode(self, text: str) -&gt; List[int]:
+        """Maps each Unicode character to a strictly positive class ID in [1, 511]."""
+        return [self.char_to_id.get(ch, self.unk_id) for ch in text]
+
+    @staticmethod
+    def min_ctc_frames(token_ids: List[int]) -&gt; int:
+        """
+        Computes the exact minimum number of CTC frames required to align `token_ids`:
+        len(token_ids) + number of adjacent duplicate token pairs.
+        """
+        if not token_ids:
+            return 0
+        repeats = sum(
+            1 for i in range(1, len(token_ids)) if token_ids[i] == token_ids[i - 1]
+        )
+        return len(token_ids) + repeats
+
+    @classmethod
+    def truncate_to_ctc_budget(
+        cls, token_ids: List[int], max_frames: int
+    ) -&gt; List[int]:
+        """Truncates a token sequence to the longest prefix that fits within `max_frames` CTC steps."""
+        out: List[int] = []
+        used = 0
+        for tid in token_ids:
+            step = 2 if (out and out[-1] == tid) else 1
+            if used + step &gt; max_frames:
+                break
+            out.append(tid)
+            used += step
+        return out
+
+    def decode_ctc(self, logits_1d: torch.Tensor) -&gt; str:
+        """Greedy CTC collapse over (L, 512) frame logits."""
+        pred_ids = logits_1d.argmax(dim=-1).tolist()
+        out_chars: List[str] = []
+        prev = self.blank_id
+        for idx in pred_ids:
+            if idx != self.blank_id and idx != prev:
+                if idx != self.unk_id:
+                    out_chars.append(self.id_to_char[idx])
+            prev = idx
+        return "".join(out_chars)
+
+
+# ============================================================================
+# 2. Dependency-Free Optimal Bipartite Matcher (Hungarian Algorithm)
+# ============================================================================
+class HungarianMatcher:
+    """
+    Exact minimum-weight bipartite assignment (Jonker-Volgenant / Kuhn-Munkres)
+    supporting arbitrary rectangular cost matrices (M=0, M &lt; K, M == K, M &gt; K)
+    with zero external dependencies beyond PyTorch.
+    """
+
+    @staticmethod
+    @torch.no_grad()
+    def assign(cost_matrix: torch.Tensor) -&gt; Tuple[torch.Tensor, torch.Tensor]:
+        device = cost_matrix.device
+        M, K = cost_matrix.shape
+        if M == 0 or K == 0:
+            empty = torch.zeros(0, dtype=torch.long, device=device)
+            return empty, empty
+
+        cost_cpu = cost_matrix.detach().float().cpu().tolist()
+        transposed = False
+        if M &gt; K:
+            cost_cpu = [[cost_cpu[r][c] for r in range(M)] for c in range(K)]
+            n, m = K, M
+            transposed = True
+        else:
+            n, m = M, K
+
+        u = [0.0] * (n + 1)
+        v = [0.0] * (m + 1)
+        p = [0] * (m + 1)
+        way = [0] * (m + 1)
+
+        for i in range(1, n + 1):
+            p[0] = i
+            j0 = 0
+            minv = [float("inf")] * (m + 1)
+            used = [False] * (m + 1)
+            while True:
+                used[j0] = True
+                i0 = p[j0]
+                delta = float("inf")
+                j1 = 0
+                row_i0 = cost_cpu[i0 - 1]
+                u_i0 = u[i0]
+                for j in range(1, m + 1):
+                    if not used[j]:
+                        cur = row_i0[j - 1] - u_i0 - v[j]
+                        if cur &lt; minv[j]:
+                            minv[j] = cur
+                            way[j] = j0
+                        if minv[j] &lt; delta:
+                            delta = minv[j]
+                            j1 = j
+                for j in range(m + 1):
+                    if used[j]:
+                        u[p[j]] += delta
+                        v[j] -= delta
+                    else:
+                        minv[j] -= delta
+                j0 = j1
+                if p[j0] == 0:
+                    break
+            while True:
+                j1 = way[j0]
+                p[j0] = p[j1]
+                j0 = j1
+                if j0 == 0:
+                    break
+
+        pairs: List[Tuple[int, int]] = []
+        for j in range(1, m + 1):
+            if p[j] &gt; 0:
+                if transposed:
+                    pairs.append((j - 1, p[j] - 1))
+                else:
+                    pairs.append((p[j] - 1, j - 1))
+        pairs.sort(key=lambda rc: rc[0])
+        rows = torch.tensor([r for r, _ in pairs], dtype=torch.long, device=device)
+        cols = torch.tensor([c for _, c in pairs], dtype=torch.long, device=device)
+        return rows, cols
+
+    @classmethod
+    @torch.no_grad()
+    def match_proposals(
+        cls,
+        anchor_xy: torch.Tensor,      # (K, 2)
+        pred_boxes: torch.Tensor,     # (K, 6)
+        node_scores: torch.Tensor,    # (K,)
+        proposal_mask: torch.Tensor,  # (K,) bool
+        gt_boxes: torch.Tensor,       # (M, 6)
+        gt_roles: Optional[torch.Tensor] = None,     # (M,) optional role id
+        proposal_tiers: Optional[torch.Tensor] = None,  # (K,) optional tier id
+    ) -&gt; Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Matches M ground-truth boxes to valid non-duplicate proposals in K.
+        Handles M = 0, M &lt;= K_valid, and M &gt; K_valid cleanly without exceptions.
+        """
+        device = anchor_xy.device
+        M = gt_boxes.shape[0]
+        valid_k = torch.where(proposal_mask)[0]
+        if M == 0 or valid_k.numel() == 0:
+            empty = torch.zeros(0, dtype=torch.long, device=device)
+            return empty, empty
+
+        anc_v = anchor_xy[valid_k]
+        box_v = pred_boxes[valid_k]
+        scr_v = node_scores[valid_k]
+
+        dist_xy = torch.cdist(gt_boxes[:, :2].float(), anc_v.float(), p=2)
+        dist_box = torch.cdist(gt_boxes[:, :4].float(), box_v[:, :4].float(), p=1)
+        cost = 2.0 * dist_xy + 1.0 * dist_box - 0.25 * scr_v.float().unsqueeze(0)
+
+        if gt_roles is not None and proposal_tiers is not None:
+            gt_tier = PrismOCRv3.role_to_tier_tensor(gt_roles)
+            prop_tier_v = proposal_tiers[valid_k]
+            tier_mismatch = (gt_tier.unsqueeze(1) != prop_tier_v.unsqueeze(0)).float()
+            cost = cost + 0.5 * tier_mismatch
+
+        m_idx, kv_idx = cls.assign(cost)
+        return m_idx, valid_k[kv_idx]
+
+
+# ============================================================================
+# 3. Precision-Safe Anisotropic Structural Reparameterization
+# ============================================================================
+class AnisotropicRepDW(nn.Module):
+    def __init__(self, channels: int):
+        super().__init__()
+        self.c = channels
+        self.dw_3x3 = nn.Conv2d(
+            channels, channels, (3, 3), 1, (1, 1), groups=channels, bias=False
+        )
+        self.bn_3x3 = nn.BatchNorm2d(channels)
+        self.dw_1x7 = nn.Conv2d(
+            channels, channels, (1, 7), 1, (0, 3), groups=channels, bias=False
+        )
+        self.bn_1x7 = nn.BatchNorm2d(channels)
+        self.dw_3x1 = nn.Conv2d(
+            channels, channels, (3, 1), 1, (1, 0), groups=channels, bias=False
+        )
+        self.bn_3x1 = nn.BatchNorm2d(channels)
+        self.bn_id = nn.BatchNorm2d(channels)
+        self.fused_conv: Optional[nn.Conv2d] = None
+
+    def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
+        if self.fused_conv is not None:
+            return self.fused_conv(x)
+        return (
+            self.bn_3x3(self.dw_3x3(x))
+            + self.bn_1x7(self.dw_1x7(x))
+            + self.bn_3x1(self.dw_3x1(x))
+            + self.bn_id(x)
+        )
+
+    @torch.no_grad()
+    def fuse_for_inference(self) -&gt; None:
+        if self.fused_conv is not None:
+            return
+        device = self.dw_3x3.weight.device
+        orig_dtype = self.dw_3x3.weight.dtype
+        fused_k = torch.zeros((self.c, 1, 3, 7), device=device, dtype=torch.float32)
+        fused_b = torch.zeros(self.c, device=device, dtype=torch.float32)
+
+        def _fuse_bn(conv_w: torch.Tensor, bn: nn.BatchNorm2d):
+            w_fp32 = conv_w.float()
+            std = (bn.running_var.float() + bn.eps).sqrt()
+            scale = (bn.weight.float() / std).reshape(-1, 1, 1, 1)
+            bias = bn.bias.float() - bn.running_mean.float() * bn.weight.float() / std
+            return w_fp32 * scale, bias
+
+        w33, b33 = _fuse_bn(self.dw_3x3.weight, self.bn_3x3)
+        fused_k[:, :, :, 2:5] += w33
+        fused_b += b33
+
+        w17, b17 = _fuse_bn(self.dw_1x7.weight, self.bn_1x7)
+        fused_k[:, :, 1:2, :] += w17
+        fused_b += b17
+
+        w31, b31 = _fuse_bn(self.dw_3x1.weight, self.bn_3x1)
+        fused_k[:, :, :, 3:4] += w31
+        fused_b += b31
+
+        id_w = torch.zeros((self.c, 1, 3, 7), device=device, dtype=torch.float32)
+        id_w[:, 0, 1, 3] = 1.0
+        wid, bid = _fuse_bn(id_w, self.bn_id)
+        fused_k += wid
+        fused_b += bid
+
+        self.fused_conv = nn.Conv2d(
+            self.c, self.c, (3, 7), 1, (1, 3), groups=self.c, bias=True
+        ).to(device=device, dtype=orig_dtype)
+        self.fused_conv.weight.copy_(fused_k.to(orig_dtype))
+        self.fused_conv.bias.copy_(fused_b.to(orig_dtype))
+        del (
+            self.dw_3x3,
+            self.bn_3x3,
+            self.dw_1x7,
+            self.bn_1x7,
+            self.dw_3x1,
+            self.bn_3x1,
+            self.bn_id,
+        )
+
+
+class RepBlock(nn.Module):
+    def __init__(self, channels: int, exp_ratio: float = 2.5):
+        super().__init__()
+        hidden = int(channels * exp_ratio)
+        self.dw = AnisotropicRepDW(channels)
+        self.pw1 = nn.Conv2d(channels, hidden, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(hidden)
+        self.act = nn.SiLU(inplace=True)
+        self.pw2 = nn.Conv2d(hidden, channels, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+
+    def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
+        return x + self.bn2(self.pw2(self.act(self.bn1(self.pw1(self.dw(x))))))
+
+
+class DualModeSeqBlock(nn.Module):
+    def __init__(self, d_model: int = 160, nhead: int = 5):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d_model, nhead, batch_first=True)
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_model * 2),
+            nn.SiLU(inplace=True),
+            nn.Linear(d_model * 2, d_model),
+        )
+        self.ocr_dw1d = nn.Conv1d(
+            d_model, d_model, kernel_size=5, padding=2, groups=d_model, bias=False
+        )
+        self.ocr_bn1d = nn.BatchNorm1d(d_model)
+        self.norm1_struct = nn.LayerNorm(d_model)
+        self.norm2_struct = nn.LayerNorm(d_model)
+        self.norm1_ocr = nn.LayerNorm(d_model)
+        self.norm2_ocr = nn.LayerNorm(d_model)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        mode: str = "struct",
+        key_padding_mask: Optional[torch.Tensor] = None,
+    ) -&gt; torch.Tensor:
+        if x.shape[0] == 0:
+            return x
+        if mode == "ocr":
+            x = x + F.silu(
+                self.ocr_bn1d(self.ocr_dw1d(x.transpose(1, 2)))
+            ).transpose(1, 2)
+            n1, n2 = self.norm1_ocr, self.norm2_ocr
+        else:
+            n1, n2 = self.norm1_struct, self.norm2_struct
+        h = n1(x)
+        # Ensure at least one valid token per batch row to avoid NaN in softmax
+        if key_padding_mask is not None:
+            safe_mask = key_padding_mask.clone()
+            all_masked = safe_mask.all(dim=-1)
+            if all_masked.any():
+                safe_mask[all_masked, 0] = False
+        else:
+            safe_mask = None
+        attn_out, _ = self.attn(
+            h, h, h, key_padding_mask=safe_mask, need_weights=False
+        )
+        x = x + attn_out
+        return x + self.ffn(n2(x))
+
+
+# ============================================================================
+# 4. Complete Cycle-Safe Reading-Order, Key-Value &amp; Span-Preserving Table Decoder
+# ============================================================================
+class DocumentGraphDecoder:
+    @staticmethod
+    def traverse_reading_order(
+        active_ids: List[int],
+        boxes: torch.Tensor,       # (K, 6)
+        next_probs: torch.Tensor,  # (K, K) softmax probabilities on Channel 0
+    ) -&gt; List[int]:
+        """
+        Builds a maximum-confidence reading-order pointer graph, breaks any directed
+        cycles at their weakest confidence link, and runs Kahn's topological sort
+        with a 2D geometric priority queue (row_band, cx).
+        """
+        if not active_ids:
+            return []
+
+        def _geom_key(idx: int) -&gt; Tuple[int, float, int]:
+            cx, cy, _, h = [float(boxes[idx, k].item()) for k in range(4)]
+            return (int(cy / max(h * 0.75, 0.02)), cx, idx)
+
+        out_edge: Dict[int, Tuple[int, float]] = {}
+        for u in active_ids:
+            candidates = [v for v in active_ids if v != u]
+            if not candidates:
+                continue
+            best_v = max(candidates, key=lambda v: float(next_probs[u, v].item()))
+            p_uv = float(next_probs[u, best_v].item())
+            p_uu = float(next_probs[u, u].item())
+            if p_uv &gt; p_uu and p_uv &gt;= 0.25:
+                out_edge[u] = (best_v, p_uv)
+
+        # Break any cycles at the minimum-probability edge in the cycle
+        state = {u: 0 for u in active_ids}
+        for u in active_ids:
+            if state[u] != 0:
+                continue
+            path: List[int] = []
+            curr: Optional[int] = u
+            while curr is not None and state[curr] == 0:
+                state[curr] = 1
+                path.append(curr)
+                curr = out_edge[curr][0] if curr in out_edge else None
+            if curr is not None and state[curr] == 1:
+                cycle_nodes = path[path.index(curr) :]
+                weakest_u = min(cycle_nodes, key=lambda n: out_edge[n][1])
+                del out_edge[weakest_u]
+            for n in path:
+                state[n] = 2
+
+        in_deg = {u: 0 for u in active_ids}
+        adj: Dict[int, List[int]] = {u: [] for u in active_ids}
+        for u, (v, _) in out_edge.items():
+            adj[u].append(v)
+            in_deg[v] += 1
+
+        heap = [(_geom_key(u), u) for u in active_ids if in_deg[u] == 0]
+        heapq.heapify(heap)
+        ordered: List[int] = []
+        while heap:
+            _, u = heapq.heappop(heap)
+            ordered.append(u)
+            for v in adj[u]:
+                in_deg[v] -= 1
+                if in_deg[v] == 0:
+                    heapq.heappush(heap, (_geom_key(v), v))
+        return ordered
+
+    @staticmethod
+    def reconstruct_tables(
+        nodes_dict: Dict[int, Dict[str, Any]],
+        parent_probs: torch.Tensor,
+        right_probs: torch.Tensor,
+    ) -&gt; List[Dict[str, Any]]:
+        """
+        Uses both geometric intervals AND Channel 3 (right_probs) horizontal adjacency
+        pointers to recover (row, col, rowspan, colspan) and render span-preserving HTML &amp; Markdown.
+        """
+        table_nodes = [i for i, n in nodes_dict.items() if n["role"] == "TABLE"]
+        cell_nodes = [i for i, n in nodes_dict.items() if n["role"] == "TABLE_CELL"]
+        if not cell_nodes:
+            return []
+
+        if not table_nodes:
+            table_groups = {-1: cell_nodes}
+        else:
+            table_groups = {t_id: [] for t_id in table_nodes}
+            for c_id in cell_nodes:
+                best_t = max(
+                    table_nodes,
+                    key=lambda t_id: float(parent_probs[c_id, t_id].item()),
+                )
+                table_groups[best_t].append(c_id)
+
+        reconstructed_tables = []
+        for t_id, cells in table_groups.items():
+            if not cells:
+                continue
+            intervals: Dict[int, List[float]] = {}
+            for c_id in cells:
+                cx, cy, w, h = nodes_dict[c_id]["box"][:4]
+                intervals[c_id] = [
+                    cx - w / 2.0,
+                    cy - h / 2.0,
+                    cx + w / 2.0,
+                    cy + h / 2.0,
+                    cx,
+                    cy,
+                    w,
+                    h,
+                ]
+
+            # Apply right_probs (Channel 3) to separate horizontally linked cells
+            for u in cells:
+                others = [v for v in cells if v != u]
+                if not others:
+                    continue
+                best_v = max(others, key=lambda v: float(right_probs[u, v].item()))
+                if float(right_probs[u, best_v].item()) &gt; max(
+                    float(right_probs[u, u].item()), 0.35
+                ):
+                    if (
+                        intervals[u][4] &lt; intervals[best_v][4]
+                        and intervals[u][2] &gt; intervals[best_v][0]
+                    ):
+                        mid_x = 0.5 * (intervals[u][4] + intervals[best_v][4])
+                        intervals[u][2] = min(intervals[u][2], mid_x - 1e-3)
+                        intervals[best_v][0] = max(intervals[best_v][0], mid_x + 1e-3)
+
+            # 1. Cluster row tracks (smallest-height cells first so multi-row spans don't merge tracks)
+            sorted_by_h = sorted(cells, key=lambda i: (intervals[i][7], intervals[i][5]))
+            min_cell_h = min(intervals[k][7] for k in cells)
+            row_tracks: List[Tuple[float, float]] = []
+            for c_id in sorted_by_h:
+                _, y1, _, y2, _, _, _, h = intervals[c_id]
+                matched = False
+                for r_idx, (ry1, ry2) in enumerate(row_tracks):
+                    overlap = min(y2, ry2) - max(y1, ry1)
+                    if overlap / max(min(h, ry2 - ry1), 1e-4) &gt; 0.5:
+                        if h &lt;= (ry2 - ry1) * 1.35:
+                            row_tracks[r_idx] = (min(y1, ry1), max(y2, ry2))
+                        matched = True
+                        break
+                if not matched and h &lt;= 1.6 * min_cell_h:
+                    row_tracks.append((y1, y2))
+            if not row_tracks:
+                row_tracks = [
+                    (intervals[sorted_by_h[0]][1], intervals[sorted_by_h[0]][3])
+                ]
+            row_tracks.sort(key=lambda r: 0.5 * (r[0] + r[1]))
+
+            # 2. Cluster column tracks (smallest-width cells first)
+            sorted_by_w = sorted(cells, key=lambda i: (intervals[i][6], intervals[i][4]))
+            min_cell_w = min(intervals[k][6] for k in cells)
+            col_tracks: List[Tuple[float, float]] = []
+            for c_id in sorted_by_w:
+                x1, _, x2, _, _, _, w, _ = intervals[c_id]
+                matched = False
+                for c_idx, (cx1, cx2) in enumerate(col_tracks):
+                    overlap = min(x2, cx2) - max(x1, cx1)
+                    if overlap / max(min(w, cx2 - cx1), 1e-4) &gt; 0.45:
+                        if w &lt;= (cx2 - cx1) * 1.35:
+                            col_tracks[c_idx] = (min(x1, cx1), max(x2, cx2))
+                        matched = True
+                        break
+                if not matched and w &lt;= 1.6 * min_cell_w:
+                    col_tracks.append((x1, x2))
+            if not col_tracks:
+                col_tracks = [
+                    (intervals[sorted_by_w[0]][0], intervals[sorted_by_w[0]][2])
+                ]
+            col_tracks.sort(key=lambda c: 0.5 * (c[0] + c[1]))
+
+            num_rows, num_cols = len(row_tracks), len(col_tracks)
+            structured_cells = []
+            occupied = [[False for _ in range(num_cols)] for _ in range(num_rows)]
+            cell_by_origin: Dict[Tuple[int, int], Dict[str, Any]] = {}
+
+            for c_id in cells:
+                x1, y1, x2, y2, cx, cy, _, _ = intervals[c_id]
+                spanned_rows = [
+                    r
+                    for r, (ry1, ry2) in enumerate(row_tracks)
+                    if (min(y2, ry2) - max(y1, ry1)) / max(ry2 - ry1, 1e-4) &gt; 0.35
+                ] or [
+                    min(
+                        range(num_rows),
+                        key=lambda r: abs(
+                            cy - 0.5 * (row_tracks[r][0] + row_tracks[r][1])
+                        ),
+                    )
+                ]
+
+                spanned_cols = [
+                    c
+                    for c, (cx1, cx2) in enumerate(col_tracks)
+                    if (min(x2, cx2) - max(x1, cx1)) / max(cx2 - cx1, 1e-4) &gt; 0.35
+                ] or [
+                    min(
+                        range(num_cols),
+                        key=lambda c: abs(
+                            cx - 0.5 * (col_tracks[c][0] + col_tracks[c][1])
+                        ),
+                    )
+                ]
+
+                r_start, r_span = spanned_rows[0], len(spanned_rows)
+                c_start, c_span = spanned_cols[0], len(spanned_cols)
+                entry = {
+                    "node_id": c_id,
+                    "row": r_start,
+                    "col": c_start,
+                    "rowspan": r_span,
+                    "colspan": c_span,
+                    "text": nodes_dict[c_id]["text"],
+                }
+                structured_cells.append(entry)
+                cell_by_origin[(r_start, c_start)] = entry
+                for rr in range(r_start, min(num_rows, r_start + r_span)):
+                    for cc in range(c_start, min(num_cols, c_start + c_span)):
+                        if not (rr == r_start and cc == c_start):
+                            occupied[rr][cc] = True
+
+            # Span-Preserving HTML Table (never duplicates spanned cells)
+            html_lines = ["&lt;table&gt;"]
+            for r in range(num_rows):
+                tag = "th" if r == 0 else "td"
+                html_lines.append("  &lt;tr&gt;")
+                for c in range(num_cols):
+                    if occupied[r][c]:
+                        continue
+                    cell = cell_by_origin.get((r, c))
+                    if cell is not None:
+                        attrs = ""
+                        if cell["rowspan"] &gt; 1:
+                            attrs += f' rowspan="{cell["rowspan"]}"'
+                        if cell["colspan"] &gt; 1:
+                            attrs += f' colspan="{cell["colspan"]}"'
+                        html_lines.append(f"    &lt;{tag}{attrs}&gt;{cell['text']}&lt;/{tag}&gt;")
+                    else:
+                        html_lines.append(f"    &lt;{tag}&gt;&lt;/{tag}&gt;")
+                html_lines.append("  &lt;/tr&gt;")
+            html_lines.append("&lt;/table&gt;")
+
+            # Clean Markdown Table (without repeating text inside covered cells)
+            md_lines = []
+            for r in range(num_rows):
+                row_vals = []
+                for c in range(num_cols):
+                    cell = cell_by_origin.get((r, c))
+                    if cell is not None:
+                        span_tag = (
+                            f" [{cell['rowspan']}x{cell['colspan']}]"
+                            if (cell["rowspan"] &gt; 1 or cell["colspan"] &gt; 1)
+                            else ""
+                        )
+                        row_vals.append(f"{cell['text']}{span_tag}")
+                    else:
+                        row_vals.append("")
+                md_lines.append("| " + " | ".join(row_vals) + " |")
+                if r == 0:
+                    md_lines.append("|" + "|".join(["---"] * num_cols) + "|")
+
+            reconstructed_tables.append(
+                {
+                    "table_node_id": t_id,
+                    "num_rows": num_rows,
+                    "num_cols": num_cols,
+                    "cells": sorted(
+                        structured_cells, key=lambda c: (c["row"], c["col"])
+                    ),
+                    "html": "\n".join(html_lines),
+                    "markdown": "\n".join(md_lines),
+                }
+            )
+        return reconstructed_tables
+
+
+# ============================================================================
+# 5. PrismOCRv3 (Patched v3.1 Spec): Hierarchy-Aware Proposals &amp; Active OCR Gating
+# ============================================================================
+class PrismOCRv3(nn.Module):
+    ROLES = [
+        "PAD",         # 0
+        "TITLE",       # 1 (Tier 2: Text line)
+        "H1",          # 2 (Tier 2: Text line)
+        "H2",          # 3 (Tier 2: Text line)
+        "PARA_LINE",   # 4 (Tier 2: Text line)
+        "LIST_ITEM",   # 5 (Tier 1: Sub-region / cell / item)
+        "TABLE",       # 6 (Tier 0: Layout container)
+        "TABLE_CELL",  # 7 (Tier 1: Sub-region / cell / item)
+        "KEY",         # 8 (Tier 1: Sub-region / cell / item)
+        "VALUE",       # 9 (Tier 1: Sub-region / cell / item)
+        "FORMULA",     # 10 (Tier 2: Text line)
+        "CAPTION",     # 11 (Tier 2: Text line)
+        "HEADER",      # 12 (Tier 0: Layout container)
+        "FOOTER",      # 13 (Tier 0: Layout container)
+    ]
+    CONTAINER_ROLES = {0, 6}  # PAD and TABLE do not carry line-level CTC glyph sequences
+
+    @staticmethod
+    def role_to_tier(role_id: int) -&gt; int:
+        if role_id in (6, 12, 13):
+            return 0  # Tier 0: Containers (TABLE, HEADER, FOOTER)
+        if role_id in (5, 7, 8, 9):
+            return 1  # Tier 1: Cells &amp; KV / List spans (LIST_ITEM, TABLE_CELL, KEY, VALUE)
+        return 2      # Tier 2: Text lines (TITLE, H1, H2, PARA_LINE, FORMULA, CAPTION)
+
+    @classmethod
+    def role_to_tier_tensor(cls, roles: torch.Tensor) -&gt; torch.Tensor:
+        tiers = torch.full_like(roles, 2)
+        tiers[(roles == 6) | (roles == 12) | (roles == 13)] = 0
+        tiers[(roles == 5) | (roles == 7) | (roles == 8) | (roles == 9)] = 1
+        return tiers
+
+    def __init__(
+        self,
+        d_model: int = 160,
+        max_nodes: int = 96,
+        strip_len: int = 160,
+        pool_h: int = 5,
+        num_roles: int = 14,
+        num_tiers: int = 3,
+        char_vocab: int = 512,
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.max_nodes = max_nodes
+        self.strip_len = strip_len
+        self.pool_h = pool_h
+        self.num_tiers = num_tiers
+        self.tokenizer = CharTokenizer512()
+
+        # 1. Shared Multi-Scale Anisotropic Backbone
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 32, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(32, 64, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.SiLU(inplace=True),
+        )  # H/4
+        self.stage4 = nn.Sequential(RepBlock(64, 2.0), RepBlock(64, 2.0))
+        self.down8 = nn.Sequential(
+            nn.Conv2d(64, 112, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(112),
+            nn.SiLU(inplace=True),
+        )  # H/8
+        self.stage8 = nn.Sequential(
+            RepBlock(112, 2.5), RepBlock(112, 2.5), RepBlock(112, 2.5)
+        )
+        self.down16 = nn.Sequential(
+            nn.Conv2d(112, d_model, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(d_model),
+            nn.SiLU(inplace=True),
+        )  # H/16
+        self.stage16 = nn.Sequential(
+            RepBlock(d_model, 2.5), RepBlock(d_model, 2.5), RepBlock(d_model, 2.5)
+        )
+        self.cpe16 = nn.Conv2d(d_model, d_model, 3, 1, 1, groups=d_model)
+
+        # 2. Hierarchy-Aware 3-Tier Peak Proposal Head (Containers, Cells/Spans, Text Lines)
+        self.node_heatmap = nn.Conv2d(d_model, num_tiers, 1)
+        self.tier_embed = nn.Embedding(num_tiers, d_model)
+        self.pos_enc = nn.Sequential(
+            nn.Linear(2, d_model), nn.SiLU(), nn.Linear(d_model, d_model)
+        )
+
+        # 3. Weight-Shared Dual-Mode Transformer
+        self.shared_seq_blocks = nn.ModuleList(
+            [DualModeSeqBlock(d_model, nhead=5) for _ in range(2)]
+        )
+
+        # 4. Structure &amp; 4-Channel Relational Adjacency Heads
+        self.role_head = nn.Linear(d_model, num_roles)
+        self.box_head = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.SiLU(), nn.Linear(d_model, 6)
+        )
+        self.rel_q = nn.Linear(d_model, 4 * 48)
+        self.rel_k = nn.Linear(d_model, 4 * 48)
+
+        # 5. High-Res Glyph Neck + Multi-Row Vertical Collapse + 512-Class Character CTC
+        self.lat4 = nn.Conv2d(64, d_model, 1, bias=False)
+        self.lat8 = nn.Conv2d(112, d_model, 1, bias=False)
+        self.vert_collapse = nn.Conv2d(
+            d_model, d_model, kernel_size=(pool_h, 1), groups=d_model, bias=True
+        )
+        self.char_ctc_head = nn.Linear(d_model, char_vocab)
+
+    def sample_oriented_strips(
+        self,
+        f_glyph: torch.Tensor,
+        boxes: torch.Tensor,
+        node_embeds: torch.Tensor,
+        override_strip_len: Optional[int] = None,
+    ) -&gt; torch.Tensor:
+        """Samples a 2D (P_h=5 x L) oriented feature grid per box and collapses P_h -&gt; 1."""
+        B, D, _, _ = f_glyph.shape
+        K = boxes.shape[1]
+        P_h = self.pool_h
+        L = override_strip_len if override_strip_len is not None else self.strip_len
+        if K == 0:
+            return torch.zeros((0, L, D), device=f_glyph.device, dtype=f_glyph.dtype)
+
+        cx = boxes[..., 0:1] * 2.0 - 1.0
+        cy = boxes[..., 1:2] * 2.0 - 1.0
+        w, h = boxes[..., 2:3], boxes[..., 3:4]
+        sin_t, cos_t = boxes[..., 4:5], boxes[..., 5:6]
+        norm = torch.sqrt(sin_t**2 + cos_t**2 + 1e-6)
+        sin_t, cos_t = sin_t / norm, cos_t / norm
+
+        theta = torch.zeros(
+            (B, K, 2, 3), device=f_glyph.device, dtype=f_glyph.dtype
+        )
+        theta[:, :, 0, 0] = (cos_t * w).squeeze(-1)
+        theta[:, :, 0, 1] = (-sin_t * h).squeeze(-1)
+        theta[:, :, 0, 2] = cx.squeeze(-1)
+        theta[:, :, 1, 0] = (sin_t * w).squeeze(-1)
+        theta[:, :, 1, 1] = (cos_t * h).squeeze(-1)
+        theta[:, :, 1, 2] = cy.squeeze(-1)
+
+        ys_1d = torch.linspace(
+            -1.0, 1.0, P_h, device=f_glyph.device, dtype=f_glyph.dtype
+        )
+        xs_1d = torch.linspace(
+            -1.0, 1.0, L, device=f_glyph.device, dtype=f_glyph.dtype
+        )
+        grid_y, grid_x = torch.meshgrid(ys_1d, xs_1d, indexing="ij")
+        homog = torch.stack(
+            [grid_x, grid_y, torch.ones_like(grid_x)], dim=-1
+        ).reshape(1, 1, P_h * L, 3)
+        grid = torch.matmul(homog.expand(B, K, -1, -1), theta.transpose(-1, -2))
+
+        sampled = F.grid_sample(
+            f_glyph,
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        patches = sampled.permute(0, 2, 1, 3).reshape(B * K, D, P_h, L)
+        collapsed = F.silu(self.vert_collapse(patches)).squeeze(2).transpose(1, 2)
+        return collapsed + node_embeds.reshape(B * K, 1, D)
+
+    def select_non_duplicate_peaks(
+        self, heat_logits: torch.Tensor
+    ) -&gt; Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Hierarchy-Aware Plateau-Safe Peak Selection:
+        Evaluates across C=3 hierarchy tiers (Tier 0: Containers, Tier 1: Cells/KV,
+        Tier 2: Text Lines). Within each tier, suppresses 3x3 Chebyshev neighbors ONLY
+        when they belong to a flat plateau (|p_center - p_neighbor| &lt;= 1e-4) or are
+        strictly lower than a local maximum, preserving distinct adjacent peaks while
+        still guaranteeing stride-2 spacing on flat plateaus.
+        """
+        B, C, H16, W16 = heat_logits.shape
+        device = heat_logits.device
+        heat_probs = heat_logits.sigmoid()
+        K = min(self.max_nodes, C * H16 * W16)
+
+        yy = torch.arange(H16, device=device).view(1, H16, 1)
+        xx = torch.arange(W16, device=device).view(1, 1, W16)
+        cc_idx = torch.arange(C, device=device).view(C, 1, 1)
+        tie_break = (
+            ((yy % 2 == 0) &amp; (xx % 2 == 0)).float() * 1e-6
+            + (cc_idx * H16 * W16 + yy * W16 + xx).float() * 1e-9
+        )
+
+        topk_spatial_list: List[torch.Tensor] = []
+        topk_tier_list: List[torch.Tensor] = []
+        mask_list: List[torch.Tensor] = []
+        prob_list: List[torch.Tensor] = []
+
+        with torch.no_grad():
+            probs_cpu = heat_probs.detach().float().cpu().tolist()
+            scores_all = (heat_probs.detach().float() + tie_break).flatten(1)
+            sorted_orders = (
+                torch.argsort(scores_all, dim=1, descending=True).cpu().tolist()
+            )
+
+            for b in range(B):
+                suppressed = [
+                    [[False] * W16 for _ in range(H16)] for _ in range(C)
+                ]
+                sel_spatial: List[int] = []
+                sel_tier: List[int] = []
+                sel_flat: List[int] = []
+
+                for flat_i in sorted_orders[b]:
+                    tier, rem = divmod(flat_i, H16 * W16)
+                    r, c = divmod(rem, W16)
+                    if not suppressed[tier][r][c]:
+                        p_center = probs_cpu[b][tier][r][c]
+                        sel_spatial.append(rem)
+                        sel_tier.append(tier)
+                        sel_flat.append(flat_i)
+                        suppressed[tier][r][c] = True
+
+                        r0, r1 = max(0, r - 1), min(H16, r + 2)
+                        c0, c1 = max(0, c - 1), min(W16, c + 2)
+                        for rr in range(r0, r1):
+                            for cc in range(c0, c1):
+                                if rr == r and cc == c:
+                                    continue
+                                p_nb = probs_cpu[b][tier][rr][cc]
+                                # Suppress plateau ties or weak shoulders, but preserve
+                                # distinct high-confidence adjacent peaks (p_nb &gt;= 0.5)
+                                if abs(p_center - p_nb) &lt;= 1e-4 or p_nb &lt; 0.5:
+                                    suppressed[tier][rr][cc] = True
+                        if len(sel_spatial) == K:
+                            break
+
+                n_sel = len(sel_spatial)
+                pad_len = K - n_sel
+                topk_spatial_list.append(
+                    torch.tensor(
+                        sel_spatial + [0] * pad_len, dtype=torch.long, device=device
+                    )
+                )
+                topk_tier_list.append(
+                    torch.tensor(
+                        sel_tier + [0] * pad_len, dtype=torch.long, device=device
+                    )
+                )
+                mask_list.append(
+                    torch.tensor(
+                        [True] * n_sel + [False] * pad_len,
+                        dtype=torch.bool,
+                        device=device,
+                    )
+                )
+                flat_tensor = torch.tensor(
+                    sel_flat + [0] * pad_len, dtype=torch.long, device=device
+                )
+                prob_list.append(flat_tensor)
+
+        topk_idx = torch.stack(topk_spatial_list, dim=0)
+        proposal_tiers = torch.stack(topk_tier_list, dim=0)
+        proposal_mask = torch.stack(mask_list, dim=0)
+        flat_gather_idx = torch.stack(prob_list, dim=0)
+        true_probs = torch.gather(
+            heat_probs.flatten(1), 1, flat_gather_idx
+        ) * proposal_mask.to(heat_probs.dtype)
+        return true_probs, topk_idx, proposal_tiers, proposal_mask, heat_probs
+
+    def align_teacher_forced_boxes(
+        self,
+        pred_boxes: torch.Tensor,      # (B, K, 6)
+        anchor_xy: torch.Tensor,       # (B, K, 2)
+        node_scores: torch.Tensor,     # (B, K)
+        proposal_mask: torch.Tensor,   # (B, K)
+        proposal_tiers: torch.Tensor,  # (B, K)
+        gt_boxes: Union[torch.Tensor, List[torch.Tensor]],
+        teacher_force_ratio: float = 1.0,
+    ) -&gt; Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Matches variable-count M_b ground-truth boxes to the K proposals via Hungarian
+        assignment and replaces ONLY the matched proposal slots in a cloned (B, K, 6)
+        tensor, returning both `aligned_boxes` and `matched_slot_mask` (B, K).
+        """
+        B, K, _ = pred_boxes.shape
+        aligned = pred_boxes.clone()
+        matched_slot_mask = torch.zeros(
+            (B, K), dtype=torch.bool, device=pred_boxes.device
+        )
+        alpha = float(max(0.0, min(1.0, teacher_force_ratio)))
+
+        for b in range(B):
+            gt_b = gt_boxes[b].to(device=pred_boxes.device, dtype=pred_boxes.dtype)
+            if gt_b.numel() == 0:
+                continue
+            m_idx, k_idx = HungarianMatcher.match_proposals(
+                anchor_xy[b],
+                pred_boxes[b],
+                node_scores[b],
+                proposal_mask[b],
+                gt_b,
+                proposal_tiers=proposal_tiers[b],
+            )
+            if m_idx.numel() &gt; 0:
+                matched_slot_mask[b, k_idx] = True
+                if alpha &gt; 0.0:
+                    aligned[b, k_idx] = (
+                        (1.0 - alpha) * pred_boxes[b, k_idx] + alpha * gt_b[m_idx]
+                    )
+        return aligned, matched_slot_mask
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        gt_boxes: Optional[Union[torch.Tensor, List[torch.Tensor]]] = None,
+        teacher_force_ratio: float = 1.0,
+        override_strip_len: Optional[int] = None,
+        score_thresh: float = 0.35,
+        gate_ocr_by_active: bool = True,
+    ) -&gt; Dict[str, torch.Tensor]:
+        B, _, _, _ = x.shape
+        f4 = self.stage4(self.stem(x))
+        f8 = self.stage8(self.down8(f4))
+        f16 = self.stage16(self.down16(f8))
+        f16 = f16 + self.cpe16(f16)
+
+        _, D, H16, W16 = f16.shape
+        heat_logits = self.node_heatmap(f16)
+        topk_probs, topk_idx, proposal_tiers, proposal_mask, heat_probs = (
+            self.select_non_duplicate_peaks(heat_logits)
+        )
+        K = topk_idx.shape[1]
+
+        mem = f16.flatten(2).transpose(1, 2)
+        nodes = torch.gather(mem, 1, topk_idx.unsqueeze(-1).expand(-1, -1, D))
+
+        gy = (topk_idx // W16).to(x.dtype) / max(H16 - 1, 1)
+        gx = (topk_idx % W16).to(x.dtype) / max(W16 - 1, 1)
+        anchor_xy = torch.stack([gx, gy], dim=-1)
+
+        nodes = (
+            nodes * (0.5 + 0.5 * topk_probs.unsqueeze(-1))
+            + self.pos_enc(anchor_xy)
+            + self.tier_embed(proposal_tiers)
+        )
+
+        # Structural self-attention masks out unused/suppressed proposal slots
+        pad_mask = ~proposal_mask
+        for blk in self.shared_seq_blocks:
+            nodes = blk(nodes, mode="struct", key_padding_mask=pad_mask)
+
+        role_logits = self.role_head(nodes)
+        raw_box = self.box_head(nodes)
+        # Normalize (sin_t, cos_t) directly in `boxes` so box loss &amp; sampler see unit vectors
+        unit_orient = F.normalize(raw_box[..., 4:6], p=2, dim=-1, eps=1e-6)
+        boxes = torch.cat(
+            [
+                (anchor_xy + 0.25 * torch.tanh(raw_box[..., :2])).clamp(0.0, 1.0),
+                raw_box[..., 2:4].sigmoid().clamp(min=1e-3),
+                unit_orient,
+            ],
+            dim=-1,
+        )
+
+        q_rel = self.rel_q(nodes).view(B, -1, 4, 48).permute(0, 2, 1, 3)
+        k_rel = self.rel_k(nodes).view(B, -1, 4, 48).permute(0, 2, 3, 1)
+        rel_logits = torch.matmul(q_rel, k_rel) / (48 ** 0.5)
+
+        f_glyph = self.lat4(f4) + F.interpolate(
+            self.lat8(f8), size=f4.shape[-2:], mode="bilinear", align_corners=False
+        )
+        if gt_boxes is not None:
+            sample_boxes, matched_slot_mask = self.align_teacher_forced_boxes(
+                boxes,
+                anchor_xy,
+                topk_probs,
+                proposal_mask,
+                proposal_tiers,
+                gt_boxes,
+                teacher_force_ratio,
+            )
+        else:
+            sample_boxes = boxes
+            matched_slot_mask = None
+
+        L = override_strip_len if override_strip_len is not None else self.strip_len
+        char_logits = torch.zeros(
+            (B, K, L, 512), device=x.device, dtype=x.dtype
+        )
+        # Initialize blank logit high for non-decoded / masked slots
+        char_logits[..., 0] = 10.0
+
+        if gate_ocr_by_active:
+            pred_roles = role_logits.argmax(dim=-1)
+            is_text_role = (pred_roles != 0) &amp; (pred_roles != 6)
+            if self.training:
+                # During training, decode all valid proposals (or matched slots)
+                ocr_mask = proposal_mask if matched_slot_mask is None else (proposal_mask &amp; matched_slot_mask)
+            else:
+                ocr_mask = proposal_mask &amp; (topk_probs &gt;= score_thresh) &amp; is_text_role
+        else:
+            ocr_mask = torch.ones((B, K), dtype=torch.bool, device=x.device)
+
+        # Sample and run OCR sequence blocks only on active text-bearing proposals
+        for b in range(B):
+            act_k = torch.where(ocr_mask[b])[0]
+            if act_k.numel() == 0:
+                continue
+            strips_b = self.sample_oriented_strips(
+                f_glyph[b : b + 1],
+                sample_boxes[b : b + 1, act_k],
+                nodes[b : b + 1, act_k],
+                override_strip_len=L,
+            )
+            for blk in self.shared_seq_blocks:
+                strips_b = blk(strips_b, mode="ocr")
+            char_logits[b, act_k] = self.char_ctc_head(strips_b)
+
+        return {
+            "heat_logits": heat_logits,
+            "heat_probs": heat_probs,
+            "topk_idx": topk_idx,
+            "proposal_tiers": proposal_tiers,
+            "proposal_mask": proposal_mask,
+            "ocr_active_mask": ocr_mask,
+            "anchor_xy": anchor_xy,
+            "node_scores": topk_probs,
+            "role_logits": role_logits,
+            "boxes": boxes,
+            "sample_boxes": sample_boxes,
+            "rel_logits": rel_logits,
+            "char_logits": char_logits,
+        }
+
+    def fuse_for_inference(self) -&gt; None:
+        for m in self.modules():
+            if isinstance(m, AnisotropicRepDW):
+                m.fuse_for_inference()
+
+    def extract_structured_document(
+        self, outputs: Dict[str, torch.Tensor], score_thresh: float = 0.35
+    ) -&gt; Dict[str, Any]:
+        scores = outputs["node_scores"][0]
+        prop_mask = outputs["proposal_mask"][0]
+        roles = outputs["role_logits"][0].argmax(dim=-1)
+        boxes = outputs["boxes"][0]
+        rel_probs = outputs["rel_logits"][0].softmax(dim=-1)
+        rel_ids = rel_probs.argmax(dim=-1)
+        char_logits = outputs["char_logits"][0]
+
+        active_ids = [
+            i
+            for i in range(scores.shape[0])
+            if bool(prop_mask[i].item())
+            and scores[i].item() &gt;= score_thresh
+            and roles[i].item() != 0
+        ]
+        ordered_ids = DocumentGraphDecoder.traverse_reading_order(
+            active_ids, boxes, rel_probs[0]
+        )
+
+        nodes_dict = {}
+        for rank, i in enumerate(ordered_ids):
+            role_name = self.ROLES[roles[i].item()]
+            nodes_dict[i] = {
+                "id": i,
+                "reading_order": rank,
+                "role": role_name,
+                "box": [round(v, 4) for v in boxes[i].tolist()],
+                "text": "" if role_name == "TABLE" else self.tokenizer.decode_ctc(char_logits[i]),
+                "next_id": int(rel_ids[0, i].item()),
+                "parent_id": int(rel_ids[1, i].item()),
+                "kv_val_id": int(rel_ids[2, i].item()),
+                "right_cell_id": int(rel_ids[3, i].item()),
+            }
+
+        # Validated Key-&gt;Value extraction: target must exist, not be a self-loop, and have role == "VALUE"
+        kv_pairs = {}
+        for i, n in nodes_dict.items():
+            target = n["kv_val_id"]
+            if (
+                n["role"] == "KEY"
+                and target != i
+                and target in nodes_dict
+                and nodes_dict[target]["role"] == "VALUE"
+            ):
+                kv_pairs[n["text"].strip(": ")] = nodes_dict[target]["text"]
+
+        tables = DocumentGraphDecoder.reconstruct_tables(
+            nodes_dict, rel_probs[1], rel_probs[3]
+        )
+        return {
+            "reading_ordered_nodes": [nodes_dict[i] for i in ordered_ids],
+            "key_value_extractions": kv_pairs,
+            "tables": tables,
+        }
+
+
+# ============================================================================
+# 6. Complete Target Assignment &amp; Unified Loss Module (PrismOCRLoss)
+# ============================================================================
+class PrismOCRLoss(nn.Module):
+    def __init__(
+        self, tokenizer: CharTokenizer512, strict_ctc_length: bool = True
+    ):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.strict_ctc_length = strict_ctc_length
+
+    @staticmethod
+    def render_gt_heatmap(
+        gt_boxes: List[torch.Tensor],
+        gt_roles: Optional[List[torch.Tensor]],
+        num_tiers: int,
+        H16: int,
+        W16: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -&gt; torch.Tensor:
+        """
+        Hierarchy-Aware Guaranteed-Positive Heatmap Rendering:
+        Routes each ground-truth object to its hierarchy tier channel c in {0, 1, 2}
+        (0: TABLE/HEADER/FOOTER, 1: TABLE_CELL/KEY/VALUE/LIST_ITEM, 2: Text Lines)
+        so containers and their child cells/lines never collide on the same channel.
+        Snaps centers to (round(cx), round(cy)) and explicitly clamps peak = 1.0.
+        """
+        B = len(gt_boxes)
+        target_hm = torch.zeros((B, num_tiers, H16, W16), device=device, dtype=dtype)
+        ys = torch.arange(H16, device=device, dtype=dtype).view(H16, 1)
+        xs = torch.arange(W16, device=device, dtype=dtype).view(1, W16)
+
+        for b in range(B):
+            boxes = gt_boxes[b]
+            roles = gt_roles[b] if gt_roles is not None else None
+            occupied: Dict[int, set] = {t: set() for t in range(num_tiers)}
+            for m in range(boxes.shape[0]):
+                role_id = int(roles[m].item()) if roles is not None else 4
+                tier = PrismOCRv3.role_to_tier(role_id) if num_tiers &gt; 1 else 0
+                cx = float(boxes[m, 0].item()) * (W16 - 1)
+                cy = float(boxes[m, 1].item()) * (H16 - 1)
+                ix = max(0, min(W16 - 1, int(round(cx))))
+                iy = max(0, min(H16 - 1, int(round(cy))))
+                if (iy, ix) in occupied[tier]:
+                    free_cells = [
+                        (r, c)
+                        for r in range(H16)
+                        for c in range(W16)
+                        if (r, c) not in occupied[tier]
+                    ]
+                    if free_cells:
+                        iy, ix = min(
+                            free_cells,
+                            key=lambda rc: (rc[0] - cy) ** 2 + (rc[1] - cx) ** 2,
+                        )
+                occupied[tier].add((iy, ix))
+
+                w_m = max(float(boxes[m, 2].item()), 1e-3)
+                h_m = max(float(boxes[m, 3].item()), 1e-3)
+                sigma = max(1.0, math.sqrt(w_m * W16 * h_m * H16) * 0.25)
+                gauss = torch.exp(
+                    -((xs - ix) ** 2 + (ys - iy) ** 2) / (2.0 * sigma ** 2)
+                )
+                target_hm[b, tier] = torch.maximum(target_hm[b, tier], gauss)
+                target_hm[b, tier, iy, ix] = 1.0
+        return target_hm
+
+    @staticmethod
+    def gaussian_focal_loss(
+        pred: torch.Tensor, target: torch.Tensor
+    ) -&gt; torch.Tensor:
+        pred = pred.clamp(1e-6, 1.0 - 1e-6)
+        pos_mask = (target &gt;= 0.99).float()
+        neg_mask = (target &lt; 0.99).float()
+        neg_weights = torch.pow(1.0 - target, 4.0)
+        pos_loss = -torch.log(pred) * torch.pow(1.0 - pred, 2.0) * pos_mask
+        neg_loss = (
+            -torch.log(1.0 - pred) * torch.pow(pred, 2.0) * neg_weights * neg_mask
+        )
+        return (pos_loss.sum() + neg_loss.sum()) / pos_mask.sum().clamp(min=1.0)
+
+    def forward(
+        self, outputs: Dict[str, torch.Tensor], targets: List[Dict[str, Any]]
+    ) -&gt; Dict[str, Any]:
+        heat_probs = outputs["heat_probs"]
+        B, C, H16, W16 = heat_probs.shape
+        device, dtype = heat_probs.device, heat_probs.dtype
+        K = outputs["role_logits"].shape[1]
+        T_frames = outputs["char_logits"].shape[2]
+
+        gt_boxes_list = [t["boxes"].to(device=device, dtype=dtype) for t in targets]
+        gt_roles_list = [t["roles"].to(device=device) for t in targets]
+        target_hm = self.render_gt_heatmap(
+            gt_boxes_list, gt_roles_list, C, H16, W16, device, dtype
+        )
+        loss_hm = self.gaussian_focal_loss(heat_probs, target_hm)
+
+        total_role = torch.tensor(0.0, device=device, dtype=dtype)
+        total_box = torch.tensor(0.0, device=device, dtype=dtype)
+        total_rel = torch.tensor(0.0, device=device, dtype=dtype)
+
+        ctc_log_probs, ctc_targets, ctc_in_lens, ctc_tgt_lens = [], [], [], []
+        unmatched_gt_total = 0
+        total_gt_count = 0
+        rejected_ctc_samples = 0
+
+        for b in range(B):
+            gt_b = gt_boxes_list[b]
+            gt_roles = gt_roles_list[b]
+            gt_rels = targets[b]["relations"].to(device)
+            gt_texts: List[str] = targets[b]["texts"]
+            prop_mask_b = outputs["proposal_mask"][b]
+            prop_tiers_b = outputs["proposal_tiers"][b]
+            M = gt_b.shape[0]
+            total_gt_count += M
+
+            matched_m, matched_k = HungarianMatcher.match_proposals(
+                outputs["anchor_xy"][b],
+                outputs["boxes"][b],
+                outputs["node_scores"][b],
+                prop_mask_b,
+                gt_b,
+                gt_roles=gt_roles,
+                proposal_tiers=prop_tiers_b,
+            )
+            num_matched = int(matched_m.numel())
+            unmatched_gt_total += M - num_matched
+
+            # Mask out inactive/padded proposal slots (-100 ignore_index)
+            role_tgt = torch.full((K,), -100, device=device, dtype=torch.long)
+            role_tgt[prop_mask_b] = 0
+            if num_matched &gt; 0:
+                role_tgt[matched_k] = gt_roles[matched_m]
+            role_w = torch.ones(14, device=device, dtype=dtype)
+            role_w[0] = 0.25
+            if (role_tgt != -100).any():
+                total_role = total_role + F.cross_entropy(
+                    outputs["role_logits"][b],
+                    role_tgt,
+                    weight=role_w,
+                    ignore_index=-100,
+                )
+
+            if num_matched &gt; 0:
+                pred_b = outputs["boxes"][b, matched_k]
+                gt_b_matched = gt_b[matched_m]
+                gt_orient = F.normalize(gt_b_matched[:, 4:6], p=2, dim=-1, eps=1e-6)
+                gt_b_norm = torch.cat([gt_b_matched[:, :4], gt_orient], dim=-1)
+                l1_box = F.smooth_l1_loss(pred_b, gt_b_norm)
+                px1, py1 = (
+                    pred_b[:, 0] - pred_b[:, 2] / 2.0,
+                    pred_b[:, 1] - pred_b[:, 3] / 2.0,
+                )
+                px2, py2 = (
+                    pred_b[:, 0] + pred_b[:, 2] / 2.0,
+                    pred_b[:, 1] + pred_b[:, 3] / 2.0,
+                )
+                gx1, gy1 = (
+                    gt_b_matched[:, 0] - gt_b_matched[:, 2] / 2.0,
+                    gt_b_matched[:, 1] - gt_b_matched[:, 3] / 2.0,
+                )
+                gx2, gy2 = (
+                    gt_b_matched[:, 0] + gt_b_matched[:, 2] / 2.0,
+                    gt_b_matched[:, 1] + gt_b_matched[:, 3] / 2.0,
+                )
+                inter = (torch.minimum(px2, gx2) - torch.maximum(px1, gx1)).clamp(
+                    min=0.0
+                ) * (torch.minimum(py2, gy2) - torch.maximum(py1, gy1)).clamp(
+                    min=0.0
+                )
+                union = (
+                    (pred_b[:, 2] * pred_b[:, 3])
+                    + (gt_b_matched[:, 2] * gt_b_matched[:, 3])
+                    - inter
+                    + 1e-6
+                )
+                total_box = total_box + (2.0 * l1_box + (1.0 - inter / union).mean())
+
+            rel_tgt = (
+                torch.arange(K, device=device, dtype=torch.long)
+                .unsqueeze(0)
+                .expand(4, K)
+                .clone()
+            )
+            rel_tgt[:, ~prop_mask_b] = -100
+            m_to_k = {
+                int(m_i.item()): int(k_i.item())
+                for m_i, k_i in zip(matched_m, matched_k)
+            }
+            for r_ch in range(4):
+                for m_src, k_src in m_to_k.items():
+                    m_dst = int(gt_rels[r_ch, m_src].item())
+                    rel_tgt[r_ch, k_src] = m_to_k.get(m_dst, k_src)
+            if (rel_tgt != -100).any():
+                total_rel = total_rel + F.cross_entropy(
+                    outputs["rel_logits"][b].reshape(4 * K, K),
+                    rel_tgt.reshape(4 * K),
+                    ignore_index=-100,
+                )
+
+            for m_src, k_src in m_to_k.items():
+                text = gt_texts[m_src]
+                if not text:
+                    continue
+                enc = self.tokenizer.encode(text)
+                if not enc:
+                    continue
+                req_frames = self.tokenizer.min_ctc_frames(enc)
+                if req_frames &gt; T_frames:
+                    rejected_ctc_samples += 1
+                    if self.strict_ctc_length:
+                        raise ValueError(
+                            f"CTC alignment length violation: text of length {len(enc)} "
+                            f"requires {req_frames} frames (including repeat blanks), "
+                            f"but strip_len={T_frames}. Increase strip_len / "
+                            "override_strip_len or split oversized lines."
+                        )
+                    enc = self.tokenizer.truncate_to_ctc_budget(enc, T_frames)
+                    if not enc:
+                        continue
+                ctc_log_probs.append(
+                    outputs["char_logits"][b, k_src].log_softmax(-1)
+                )
+                ctc_targets.extend(enc)
+                ctc_in_lens.append(T_frames)
+                ctc_tgt_lens.append(len(enc))
+
+        if ctc_log_probs:
+            loss_ctc = F.ctc_loss(
+                torch.stack(ctc_log_probs, dim=1),
+                torch.tensor(ctc_targets, device=device, dtype=torch.long),
+                torch.tensor(ctc_in_lens, device=device, dtype=torch.long),
+                torch.tensor(ctc_tgt_lens, device=device, dtype=torch.long),
+                blank=0,
+                zero_infinity=False,
+            )
+        else:
+            loss_ctc = torch.tensor(0.0, device=device, dtype=dtype)
+
+        total = loss_hm + (total_role + total_box + total_rel) / B + loss_ctc
+        proposal_recall = (
+            1.0
+            if total_gt_count == 0
+            else float(total_gt_count - unmatched_gt_total) / float(total_gt_count)
+        )
+        return {
+            "total": total,
+            "heatmap": loss_hm,
+            "role": total_role / B,
+            "box": total_box / B,
+            "rel": total_rel / B,
+            "ctc": loss_ctc,
+            "unmatched_gt_count": unmatched_gt_total,
+            "proposal_recall": proposal_recall,
+            "rejected_ctc_samples": rejected_ctc_samples,
+        }
+
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    model = PrismOCRv3(max_nodes=8, strip_len=64)
+    criterion_strict = PrismOCRLoss(model.tokenizer, strict_ctc_length=True)
+
+    # 1. Verify P0 Heatmap Fix + Hierarchy Separation: overlapping TABLE (role=6) and TABLE_CELL (role=7) at (0.5, 0.5)
+    hm = PrismOCRLoss.render_gt_heatmap(
+        [torch.tensor([[0.5, 0.5, 0.6, 0.4, 0.0, 1.0], [0.5, 0.5, 0.2, 0.1, 0.0, 1.0]])],
+        [torch.tensor([6, 7], dtype=torch.long)],
+        3,
+        16,
+        16,
+        torch.device("cpu"),
+        torch.float32,
+    )
+    assert (hm &gt;= 0.99).sum().item() == 2 and hm.max().item() == 1.0
+
+    # 2. Verify P1 Non-Duplicate Peak NMS on a completely flat 16x16 heatmap
+    flat_logits = torch.zeros(1, 3, 16, 16)
+    _, topk_idx, topk_tiers, prop_mask, _ = model.select_non_duplicate_peaks(flat_logits)
+    tier0_coords = [
+        (int(i) // 16, int(i) % 16)
+        for i, t, m in zip(topk_idx[0], topk_tiers[0], prop_mask[0])
+        if m and int(t) == 0
+    ]
+    if len(tier0_coords) &gt;= 2:
+        min_cheb = min(
+            max(
+                abs(tier0_coords[i][0] - tier0_coords[j][0]),
+                abs(tier0_coords[i][1] - tier0_coords[j][1]),
+            )
+            for i in range(len(tier0_coords))
+            for j in range(i + 1, len(tier0_coords))
+        )
+        assert min_cheb &gt;= 2, f"Expected min Chebyshev distance &gt;= 2, got {min_cheb}"
+
+    # 3. Verify P0 Teacher Forcing with M != K (B=2: image 0 has M=2 boxes, image 1 has M=0 empty page)
+    x_batch = torch.randn(2, 3, 256, 256)
+    gt_boxes_batch = [
+        torch.tensor(
+            [
+                [0.5, 0.2, 0.4, 0.08, 0.0, 1.0],
+                [0.5, 0.6, 0.4, 0.08, 0.0, 1.0],
+            ]
+        ),
+        torch.zeros((0, 6)),
+    ]
+    out_tf = model(x_batch, gt_boxes=gt_boxes_batch, teacher_force_ratio=1.0)
+    assert out_tf["sample_boxes"].shape == (2, 8, 6)
+
+    # 4. Verify P1 M &gt; K (10 GT objects vs K=8 proposals) and M = 0 in PrismOCRLoss
+    targets_m_gt_k = [
+        {
+            "boxes": torch.rand(10, 6).clamp(0.1, 0.9),
+            "roles": torch.ones(10, dtype=torch.long),
+            "relations": (
+                torch.arange(10, dtype=torch.long).unsqueeze(0).expand(4, 10)
+            ),
+            "texts": ["កម្ពុជា"] * 10,
+        },
+        {
+            "boxes": torch.zeros((0, 6)),
+            "roles": torch.zeros(0, dtype=torch.long),
+            "relations": torch.zeros((4, 0), dtype=torch.long),
+            "texts": [],
+        },
+    ]
+    out_unmasked = model(x_batch, gt_boxes=None, gate_ocr_by_active=False)
+    loss_out = criterion_strict(out_unmasked, targets_m_gt_k)
+    assert (
+        loss_out["unmatched_gt_count"] == 2
+        and abs(loss_out["proposal_recall"] - 0.8) &lt; 1e-5
+    )
+
+    # 5. Verify P1 Strict CTC Length Validation catches 200-char line on 64 frames
+    caught_ctc_overflow = False
+    try:
+        bad_target = [
+            {
+                "boxes": torch.tensor([[0.5, 0.5, 0.8, 0.08, 0.0, 1.0]]),
+                "roles": torch.tensor([4], dtype=torch.long),
+                "relations": torch.zeros((4, 1), dtype=torch.long),
+                "texts": ["ក" * 200],
+            }
+        ]
+        _ = criterion_strict(model(x_batch[:1], gate_ocr_by_active=False), bad_target)
+    except ValueError:
+        caught_ctc_overflow = True
+    assert caught_ctc_overflow, "Failed to catch CTC length overflow!"
+    print("All PrismOCRv3.1 verification assertions passed!")
+</pre>
+</section><section class="legacy-section" data-group="V3 / V3.1 archive" data-title="v3.1 training and ablation protocol" id="training-roadmap"><span class="sec-id">A9 / v3.1 historical reference</span>
+<h2>A9 — Staged Training &amp; Empirical Ablation Protocol</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Milestone &amp; Curriculum</th>
+<th>Primary Metrics</th>
+<th>Gate / Acceptance Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Stage 1</strong></td>
+<td><strong>Synthetic Khmer/English Line &amp; Layout Warmup</strong> (Det + CTC only, <code>α = 1.0 → 0.5</code> scheduled teacher forcing)</td>
+<td>Proposal Recall, Khmer CER, Coeng/Vowel Error Rate</td>
+<td>Proposal recall ≥ 98% on multi-tier pages; synthetic CER &lt; 1.5%</td>
+</tr>
+<tr>
+<td><strong>Stage 2</strong></td>
+<td><strong>Joint Relational Graph &amp; Table/KV Supervision</strong> (Enable 4-channel <code>rel_logits</code> loss, <code>α = 0.5 → 0.0</code>)</td>
+<td>Reading-Order Kendall τ, KV F1, Table TEDS</td>
+<td>Zero cycle crashes; span-preserving TEDS ≥ 92% on merged-cell tables</td>
+</tr>
+<tr>
+<td><strong>Stage 3</strong></td>
+<td><strong>Sequence Encoder &amp; Weight-Sharing Ablation</strong> (Shared 6.10 MB vs. Unshared 7.75 MB vs. Gated Conv1D)</td>
+<td>CPU Latency (ms/page), Peak RAM, Real-Doc CER</td>
+<td>Select Pareto-optimal sequence core under 10 MB FP32 budget</td>
+</tr>
+<tr>
+<td><strong>Stage 4</strong></td>
+<td><strong>Adaptive Resolution / Tiling &amp; ONNX Opset-16 Export</strong> (Verify <code>GridSample</code> parity across ONNX Runtime / CoreML)</td>
+<td>Small-glyph (&lt;12pt) Khmer recall, FP32/FP16 numerical parity</td>
+<td>Max fused logit drift &lt; 1e-5; verified mobile/CPU runtime execution</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section></div><div class="endcap">PrismOCR · Unified v4 engineering contract + complete v3/v3.1 technical annex · 14 October 2026 · Offline, self-contained HTML</div>
+</main>
+</div>
+<script>
+(()=>{
+  'use strict';
+  const root=document.documentElement;
+  const toggle=document.getElementById('themeToggle');
+  const storageKey='prismocr-spec-theme';
+  try {const stored=localStorage.getItem(storageKey);if(stored==='light'||stored==='dark')root.dataset.theme=stored;}catch(e){}
+  function updateTheme(){toggle.textContent=(root.dataset.theme==='light'?'Dark mode':'Light mode');}
+  updateTheme();
+  toggle.addEventListener('click',()=>{root.dataset.theme=root.dataset.theme==='light'?'dark':'light';try{localStorage.setItem(storageKey,root.dataset.theme);}catch(e){}updateTheme();});
+  const allSections=[...document.querySelectorAll('main section[data-title]')];
+  const locations=[document.getElementById('tocDesktop'),document.getElementById('tocMobile')];
+  for(const place of locations){let last='';for(const section of allSections){const group=section.dataset.group;if(group!==last){const title=document.createElement('div');title.className='navcat';title.textContent=group;place.appendChild(title);last=group;}const a=document.createElement('a');a.href='#'+section.id;a.className='navlink';a.dataset.search=(section.dataset.title+' '+group).toLowerCase();a.textContent=section.querySelector('.sec-id').textContent.slice(0,2)+'  '+section.dataset.title;a.dataset.id=section.id;place.appendChild(a);}}
+  const search=document.getElementById('navSearch');
+  search.addEventListener('input',()=>{const q=search.value.toLowerCase().trim();for(const a of document.querySelectorAll('#tocDesktop .navlink')){a.style.display=a.dataset.search.includes(q)?'':'none';}const cats=[...document.querySelectorAll('#tocDesktop .navcat')];cats.forEach(c=>{let el=c.nextElementSibling,show=false;while(el&&!el.classList.contains('navcat')){if(el.style.display!=='none')show=true;el=el.nextElementSibling;}c.style.display=show?'':'none';});});
+  let ticking=false;
+  function frame(){let max=document.documentElement.scrollHeight-window.innerHeight;document.getElementById('progress').style.width=(max>0?(scrollY/max)*100:0).toFixed(2)+'%';let current=allSections[0]?.id;for(const s of allSections){if(s.getBoundingClientRect().top<=160)current=s.id;else break;}for(const a of document.querySelectorAll('.navlink')){a.classList.toggle('active',a.dataset.id===current);}ticking=false;}
+  window.addEventListener('scroll',()=>{if(!ticking){requestAnimationFrame(frame);ticking=true;}},{passive:true});window.addEventListener('resize',frame);frame();
+})();
+</script>
+<script>
+  function filterLedger(cat, btnEl) {
+    document.querySelectorAll('.filter-bar .btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    const rows = document.querySelectorAll('#ledger-table tbody tr');
+    rows.forEach(r => {
+      if (cat === 'all' || r.getAttribute('data-cat') === cat) {
+        r.style.display = '';
+      } else {
+        r.style.display = 'none';
+      }
+    });
+  }
+
+  function updateCalc() {
+    const kActive = parseInt(document.getElementById('inp-k').value, 10);
+    const L = parseInt(document.getElementById('inp-l').value, 10);
+    const D = parseInt(document.getElementById('inp-d').value, 10);
+    const arch = document.getElementById('inp-arch').value;
+
+    document.getElementById('lbl-k').textContent = kActive + ' / 96';
+    document.getElementById('lbl-l').textContent = L;
+    document.getElementById('lbl-d').textContent = D;
+
+    const K_eff = (arch === 'unfiltered_tf') ? 96 : kActive;
+    let seqMacsPerBlock = 0;
+    if (arch === 'gated_conv') {
+      // Gated depthwiseconv1d (k=7) + pointwise glu (D -> 2D -> D) + FFN (D -> 2D -> D)
+      const dw = K_eff * L * D * 7;
+      const pw = K_eff * L * (D * 2 * D + D * D);
+      const ffn = K_eff * L * (2 * D * 2 * D);
+      seqMacsPerBlock = dw + pw + ffn;
+    } else {
+      const dw = K_eff * L * D * 5;
+      const attnProj = 4 * K_eff * L * D * D;
+      const attnMat = 2 * K_eff * L * L * D;
+      const ffn = 4 * K_eff * L * D * D;
+      seqMacsPerBlock = dw + attnProj + attnMat + ffn;
+    }
+
+    const totalSeqMacs = 2 * seqMacsPerBlock;
+    const ctcMacs = K_eff * L * D * 512;
+    const totalMacs = totalSeqMacs + ctcMacs;
+
+    // Baseline unfiltered at K=96, L=160, D=160
+    const baseBlock = 96 * 160 * 160 * 5 + 8 * 96 * 160 * 160 * 160 + 2 * 96 * 160 * 160 * 160;
+    const baseTotal = 2 * baseBlock + 96 * 160 * 160 * 512;
+    const savingsPct = ((1.0 - totalMacs / baseTotal) * 100.0);
+
+    document.getElementById('out-seq-macs').textContent = (totalSeqMacs / 1e9).toFixed(2) + 'B';
+    document.getElementById('out-ctc-macs').textContent = (ctcMacs / 1e9).toFixed(2) + 'B';
+    document.getElementById('out-total-macs').textContent = (totalMacs / 1e9).toFixed(2) + 'B MACs';
+    document.getElementById('out-total-gflops').textContent = ((totalMacs * 2) / 1e9).toFixed(2) + ' GFLOPs (2 ops/MAC)';
+
+    const savEl = document.getElementById('out-savings');
+    if (savingsPct >= 0) {
+      savEl.textContent = savingsPct.toFixed(1) + '% Saved';
+      savEl.style.color = 'var(--success)';
+    } else {
+      savEl.textContent = '+' + Math.abs(savingsPct).toFixed(1) + '% More';
+      savEl.style.color = 'var(--warn)';
+    }
+  }
+
+  function copyCode() {
+    const source = document.getElementById('python-source');
+    const codeText = source.textContent;
+    const btn = document.getElementById('copy-btn');
+    const original = btn.textContent;
+    const success = () => {
+      btn.textContent = 'Copied to Clipboard!';
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    };
+    const fallback = () => {
+      const area = document.createElement('textarea');
+      area.value = codeText;
+      area.setAttribute('readonly', '');
+      area.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(area);
+      area.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch(e) {}
+      area.remove();
+      if (copied) success(); else {
+        btn.textContent = 'Select source text to copy';
+        source.scrollIntoView({block:'start'});
+        setTimeout(() => { btn.textContent = original; }, 3200);
+      }
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(codeText).then(success).catch(fallback);
+    else fallback();
+  }
+
+  updateCalc();
+</script></body>
+</html>

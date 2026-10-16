@@ -1,0 +1,76 @@
+# Real-corpus training profile for a single 16 GB NVIDIA GPU.
+# Corpus: prismocr-corpus train/val-select manifests built by
+# scripts/build_real_corpus.py (composed text-line pages, real KhmerST pages, and
+# DocLayNet region pages).
+#
+# `max_page_side` downscales large scans (for example the ~3500x4300 KhmerST
+# pages) to a bounded page tensor. Normalized targets are unchanged by a uniform
+# downscale, and batching a full-resolution scan otherwise pads every page in the
+# batch to ~11x the pixels of a composed page. Validation uses the same page
+# resolution through the evaluator so checkpoint selection sees training scale.
+#
+# GPU VRAM & Throughput Tuning (RTX 5070 Ti, 16,303 MiB):
+# - Effective batch size = 8 is strictly preserved: batch_size = 4 with
+#   gradient_accumulation_steps = 2 ensures mathematical equivalence to the baseline.
+# - activation_checkpointing = true recomputes intermediate backbone activations,
+#   reducing peak VRAM from 15,832 MiB (97%) to 5,837 MiB (~5.7 GiB, 36%),
+#   providing 10.4+ GiB of safe headroom against OOM on high-resolution mixed batches.
+# - Throughput is maintained/improved (8.5-9.3 pages/sec vs 8.4 pages/sec baseline).
+# - CPU affinity: launch training with `taskset -c 0-11` to strictly bound all 10
+#   dataloader workers and 2 main process cores within 12 CPU cores.
+# - Allocator recommendation: export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+#   to prevent reserved segment fragmentation.
+
+[model]
+model_contract_version = 2
+dim = 160
+max_table_rows = 128
+max_table_cols = 128
+max_cell_span = 32
+text_proposals = 128
+region_queries = 64
+strip_height = 5
+strip_buckets = [64, 128, 160, 256]
+vocabulary_size = 512
+recognizer = "transformer"
+text_threshold = 0.55
+region_threshold = 0.5
+
+[training]
+seed = 42
+teacher_forcing_start = 1.0
+teacher_forcing_end = 0.15
+strict_ctc_length = true
+epochs = 6
+batch_size = 4
+# 10 loader workers leaves two of the 12-core CPU budget for the training
+# process's own CPU work (collation, host copies, metrics). Launch training with
+# `taskset -c 0-11` so the main process and its workers together never exceed
+# 12 cores; without an affinity mask each of them may otherwise spread across
+# all cores.
+num_workers = 10
+max_page_side = 1600
+# 3e-4 rather than the 1e-4 default: at 1e-4 one full epoch left the text
+# heatmap at ~0.12 confidence inside ground-truth lines (below the 0.55
+# operating threshold) and the box head collapsed small line heights, so the
+# real-v1/v2 checkpoints emitted zero accepted lines. The box loss regresses
+# log side lengths, which removes the vanishing-gradient trap for small sizes.
+learning_rate = 0.0003
+weight_decay = 0.01
+max_grad_norm = 5.0
+gradient_accumulation_steps = 2
+amp = true
+amp_dtype = "bfloat16"
+activation_checkpointing = true
+
+[training.loss_weights]
+heatmap = 1.0
+role = 1.0
+region = 1.0
+box = 1.0
+ctc = 1.0
+graph = 1.0
+grid = 1.0
+
+[limits]
+fp32_tensor_bytes = 10000000
