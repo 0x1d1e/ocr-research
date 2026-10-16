@@ -12,6 +12,7 @@ vocabulary_size = 512
 recognizer = "transformer"
 text_threshold = 0.55
 region_threshold = 0.5
+fused_text_head = true
 
 [training]
 seed = 42
