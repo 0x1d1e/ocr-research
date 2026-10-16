@@ -23,6 +23,7 @@ from prismocr.onnx_export import (
     export_artifact,
     export_graphs,
     decode_onnx_outputs,
+    _align_fusion_parity_outputs,
 )
 from prismocr.onnx_parity import assert_decoded_document_parity
 
@@ -68,6 +69,120 @@ class ExportableHeadTests(unittest.TestCase):
         onnx["annotation"]["regions"][0]["kind"] = "FORM_FIELD"
         with self.assertRaisesRegex(ONNXExportError, "semantic fields differ: \\['regions'\\]"):
             assert_decoded_document_parity(pytorch, onnx, label="semantic-mismatch", atol=2e-4, rtol=2e-3)
+
+    def test_fusion_parity_proposal_alignment_canonicalizes_swapped_slots(self) -> None:
+        outputs = {
+            "text_candidate_mask": torch.tensor([[True, False, True, False]]),
+            "text_proposal_indices": torch.tensor([[50, 0, 10, 0]]),
+            "text_boxes": torch.tensor([[[1.0], [2.0], [3.0], [4.0]]]),
+            "text_scores": torch.tensor([[0.5, 0.0, 0.8, 0.0]]),
+            "text_role_logits": torch.tensor([[[10.0], [20.0], [30.0], [40.0]]]),
+            "text_embeddings": torch.tensor([[[100.0], [200.0], [300.0], [400.0]]]),
+            "text_mask": torch.tensor([[True, False, False, False]]),
+            "other_tensor": torch.tensor([42.0]),
+        }
+        g = torch.arange(42, dtype=torch.float32).reshape(1, 1, 6, 7)
+        outputs["graph_logits"] = g
+        outputs["graph_mask"] = torch.tensor([[True, False, False, True, True, False]])
+
+        aligned = _align_fusion_parity_outputs(outputs)
+        self.assertTrue(torch.equal(aligned["text_proposal_indices"], torch.tensor([[10, 50, 0, 0]])))
+        self.assertTrue(torch.equal(aligned["text_candidate_mask"], torch.tensor([[True, True, False, False]])))
+        self.assertTrue(torch.equal(aligned["text_boxes"], torch.tensor([[[3.0], [1.0], [2.0], [4.0]]])))
+        self.assertTrue(torch.equal(aligned["text_scores"], torch.tensor([[0.8, 0.5, 0.0, 0.0]])))
+        self.assertTrue(torch.equal(aligned["text_role_logits"], torch.tensor([[[30.0], [10.0], [20.0], [40.0]]])))
+        self.assertTrue(torch.equal(aligned["text_embeddings"], torch.tensor([[[300.0], [100.0], [200.0], [400.0]]])))
+        self.assertTrue(torch.equal(aligned["text_mask"], torch.tensor([[False, True, False, False]])))
+        self.assertTrue(torch.equal(aligned["other_tensor"], torch.tensor([42.0])))
+
+        combined = [2, 0, 1, 3, 4, 5]
+        expected_g = torch.zeros_like(g)
+        for r_new, r_old in enumerate(combined):
+            for c_new, c_old in enumerate(combined):
+                expected_g[0, 0, r_new, c_new] = g[0, 0, r_old, c_old]
+            expected_g[0, 0, r_new, 6] = g[0, 0, r_old, 6]
+        self.assertTrue(torch.equal(aligned["graph_logits"], expected_g))
+        self.assertTrue(torch.equal(aligned["graph_mask"], outputs["graph_mask"][:, combined]))
+
+    def test_fusion_parity_report_tolerates_marginal_boundary_proposals(self) -> None:
+        from unittest.mock import patch
+        from prismocr.model.network import PrismOCRModel
+        from prismocr.onnx_export import _fusion_parity_report, _torch_core_reference
+
+        vocab = Vocabulary.from_texts(["abc"])
+        model = PrismOCRModel(
+            model_contract_version=2,
+            dim=10,
+            text_proposals=4,
+            region_queries=2,
+            vocab_size=len(vocab),
+            vocabulary=vocab,
+            text_threshold=0.0,
+            region_threshold=0.15,
+        )
+
+        call_count = 0
+        orig_ref = _torch_core_reference
+
+        def mock_ref(m: PrismOCRModel, images: torch.Tensor) -> dict[str, torch.Tensor]:
+            nonlocal call_count
+            ref = orig_ref(m, images)
+            if images.dtype == torch.float16:
+                call_count += 1
+                if call_count % 2 == 1:
+                    ref["text_proposal_indices"] = torch.tensor([[10, 20, 30, 40]])
+                    ref["text_scores"] = torch.tensor([[0.8, 0.5, 0.2, 0.0050]], dtype=images.dtype)
+                else:
+                    ref["text_proposal_indices"] = torch.tensor([[10, 20, 30, 45]])
+                    ref["text_scores"] = torch.tensor([[0.8, 0.5, 0.2, 0.0051]], dtype=images.dtype)
+                    ref["text_boxes"] = ref["text_boxes"].clone()
+                    ref["text_boxes"][0, 3, :] += 999.0
+                    ref["graph_logits"] = ref["graph_logits"].clone()
+                    ref["graph_logits"][0, :, 3, :] += 999.0
+                    ref["graph_logits"][0, :, :, 3] += 999.0
+            return ref
+
+        with patch("prismocr.onnx_export._torch_core_reference", side_effect=mock_ref):
+            report = _fusion_parity_report(model, model, image_sizes=[(16, 16)], seed=123)
+            self.assertEqual(report["status"], "passed")
+            self.assertTrue(all(case["status"] == "passed" for case in report["cases"]))
+
+    def test_fusion_parity_report_rejects_non_marginal_boundary_proposal_discrepancy(self) -> None:
+        from unittest.mock import patch
+        from prismocr.model.network import PrismOCRModel
+        from prismocr.onnx_export import _fusion_parity_report, ONNXExportError, _torch_core_reference
+
+        vocab = Vocabulary.from_texts(["abc"])
+        model = PrismOCRModel(
+            model_contract_version=2,
+            dim=10,
+            text_proposals=4,
+            region_queries=2,
+            vocab_size=len(vocab),
+            vocabulary=vocab,
+            text_threshold=0.0,
+            region_threshold=0.15,
+        )
+
+        call_count = 0
+        orig_ref = _torch_core_reference
+
+        def mock_ref(m: PrismOCRModel, images: torch.Tensor) -> dict[str, torch.Tensor]:
+            nonlocal call_count
+            ref = orig_ref(m, images)
+            if images.dtype == torch.float16:
+                call_count += 1
+                if call_count % 2 == 1:
+                    ref["text_proposal_indices"] = torch.tensor([[10, 20, 30, 40]])
+                    ref["text_scores"] = torch.tensor([[0.8, 0.5, 0.0050, 0.5]], dtype=images.dtype)
+                else:
+                    ref["text_proposal_indices"] = torch.tensor([[10, 20, 30, 45]])
+                    ref["text_scores"] = torch.tensor([[0.8, 0.5, 0.0050, 0.0051]], dtype=images.dtype)
+            return ref
+
+        with patch("prismocr.onnx_export._torch_core_reference", side_effect=mock_ref):
+            with self.assertRaisesRegex(ONNXExportError, "not within atol"):
+                _fusion_parity_report(model, model, image_sizes=[(16, 16)], seed=123)
 
     def test_text_proposal_pads_when_spatial_sites_are_below_capacity(self) -> None:
         from prismocr.model.heads import TextLineHead
@@ -260,6 +375,10 @@ class ONNXExportTest(unittest.TestCase):
             [case["precision"] for case in fusion["cases"]], ["float32", "float16"]
         )
         self.assertTrue(all(case["status"] == "passed" for case in fusion["cases"]))
+        self.assertTrue(all("checked_outputs" not in case for case in fusion["cases"]))
+        self.assertTrue(all("tensor_outputs_checked" in case for case in fusion["cases"]))
+        self.assertTrue(all("max_absolute_error" in case for case in fusion["cases"]))
+        self.assertTrue(all("max_relative_error" in case for case in fusion["cases"]))
         self.assertTrue(all(case["image_sizes_hw"] == [[16, 16], [64, 80], [96, 128]] for case in fusion["cases"]))
         cases = parity["recognizer_cases"]
         for bucket in (64, 128, 160, 256):

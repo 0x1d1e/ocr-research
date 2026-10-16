@@ -587,6 +587,78 @@ def _assert_close(
         ) from exc
 
 
+_PROPOSAL_INDEXED_OUTPUT_NAMES = (
+    "text_boxes",
+    "text_scores",
+    "text_role_logits",
+    "text_embeddings",
+    "text_mask",
+    "text_candidate_mask",
+    "text_proposal_indices",
+)
+
+
+def _align_fusion_parity_outputs(
+    outputs: dict[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    """Canonicalize proposal-indexed and relation outputs by proposal index for parity comparison."""
+    if "text_candidate_mask" not in outputs or "text_proposal_indices" not in outputs:
+        return outputs
+
+    candidate_mask = outputs["text_candidate_mask"]
+    proposal_indices = outputs["text_proposal_indices"]
+    batch_size, max_proposals = candidate_mask.shape
+    device = candidate_mask.device
+
+    order_list: list[torch.Tensor] = []
+    for b in range(batch_size):
+        mask_b = candidate_mask[b].tolist()
+        indices_b = proposal_indices[b].tolist()
+        valid_slots = [i for i, is_valid in enumerate(mask_b) if is_valid]
+        invalid_slots = [i for i, is_valid in enumerate(mask_b) if not is_valid]
+        valid_slots.sort(key=lambda i: indices_b[i])
+        order_list.append(torch.tensor(valid_slots + invalid_slots, dtype=torch.long, device=device))
+    text_order = torch.stack(order_list, dim=0)
+
+    aligned = dict(outputs)
+    for key in _PROPOSAL_INDEXED_OUTPUT_NAMES:
+        if key in outputs:
+            t = outputs[key]
+            index = text_order
+            while index.ndim < t.ndim:
+                index = index.unsqueeze(-1)
+            aligned[key] = torch.gather(t, 1, index.expand_as(t))
+
+    if "graph_logits" in outputs or "graph_mask" in outputs:
+        num_nodes = (
+            outputs["graph_logits"].shape[2]
+            if "graph_logits" in outputs
+            else outputs["graph_mask"].shape[1]
+        )
+        region_indices = torch.arange(max_proposals, num_nodes, device=device).unsqueeze(0).expand(batch_size, -1)
+        combined_order = torch.cat([text_order, region_indices], dim=1)
+
+        if "graph_logits" in outputs:
+            g = outputs["graph_logits"]
+            batch, num_relations, _, num_nodes_plus_one = g.shape
+            row_index = combined_order.view(batch, 1, num_nodes, 1).expand(
+                batch, num_relations, num_nodes, num_nodes_plus_one
+            )
+            g_perm = torch.gather(g, 2, row_index)
+
+            col_index = combined_order.view(batch, 1, 1, num_nodes).expand(
+                batch, num_relations, num_nodes, num_nodes
+            )
+            g_nodes = torch.gather(g_perm[:, :, :, :num_nodes], 3, col_index)
+            g_null = g_perm[:, :, :, num_nodes:]
+            aligned["graph_logits"] = torch.cat([g_nodes, g_null], dim=-1)
+
+        if "graph_mask" in outputs:
+            aligned["graph_mask"] = torch.gather(outputs["graph_mask"], 1, combined_order)
+
+    return aligned
+
+
 def _fusion_parity_report(
     fused_model: PrismOCRModel,
     unfused_model: PrismOCRModel,
@@ -610,10 +682,77 @@ def _fusion_parity_report(
         with torch.inference_mode():
             for height, width in image_sizes:
                 images = torch.rand((1, 3, height, width), generator=generator, dtype=dtype)
-                expected = _torch_core_reference(unfused, images)
-                actual = _torch_core_reference(fused, images)
+                expected = _align_fusion_parity_outputs(_torch_core_reference(unfused, images))
+                actual = _align_fusion_parity_outputs(_torch_core_reference(fused, images))
+
+                exp_cand = expected["text_candidate_mask"]
+                act_cand = actual["text_candidate_mask"]
+                exp_pids = expected["text_proposal_indices"]
+                act_pids = actual["text_proposal_indices"]
+
+                exp_valid = [i for i, v in enumerate(exp_cand[0].tolist()) if v]
+                act_valid = [j for j, v in enumerate(act_cand[0].tolist()) if v]
+                exp_pid_to_slot = {int(exp_pids[0, i].item()): i for i in exp_valid}
+                act_pid_to_slot = {int(act_pids[0, j].item()): j for j in act_valid}
+
+                common_pids = sorted(set(exp_pid_to_slot.keys()) & set(act_pid_to_slot.keys()))
+                exp_common_slots = [exp_pid_to_slot[pid] for pid in common_pids]
+                act_common_slots = [act_pid_to_slot[pid] for pid in common_pids]
+
+                exp_only_pids = [pid for pid in exp_pid_to_slot if pid not in act_pid_to_slot]
+                act_only_pids = [pid for pid in act_pid_to_slot if pid not in exp_pid_to_slot]
+
+                if exp_only_pids or act_only_pids:
+                    max_k = exp_cand.shape[1]
+                    exp_scores = [float(expected["text_scores"][0, s]) for s in exp_valid]
+                    act_scores = [float(actual["text_scores"][0, s]) for s in act_valid]
+                    exp_boundary = min(exp_scores) if exp_scores else 0.0
+                    act_boundary = min(act_scores) if act_scores else 0.0
+
+                    if len(exp_valid) >= max_k and len(act_valid) >= max_k:
+                        if abs(exp_boundary - act_boundary) > atol + rtol * abs(exp_boundary):
+                            raise ONNXExportError(
+                                f"parity failed for fusion:{name}:{height}x{width}: top-K boundary scores differ: "
+                                f"expected {exp_boundary:.6g}, actual {act_boundary:.6g} (atol={atol}, rtol={rtol})"
+                            )
+
+                    boundary_score = min(exp_boundary, act_boundary)
+                    for pid in exp_only_pids:
+                        score = float(expected["text_scores"][0, exp_pid_to_slot[pid]])
+                        if min(abs(score - exp_boundary), abs(score - boundary_score)) > atol:
+                            raise ONNXExportError(
+                                f"parity failed for fusion:{name}:{height}x{width}: proposal {pid} in expected only "
+                                f"has score {score:.6g}, not within atol={atol} of top-K boundary {exp_boundary:.6g}"
+                            )
+
+                    for pid in act_only_pids:
+                        score = float(actual["text_scores"][0, act_pid_to_slot[pid]])
+                        if min(abs(score - act_boundary), abs(score - boundary_score)) > atol:
+                            raise ONNXExportError(
+                                f"parity failed for fusion:{name}:{height}x{width}: proposal {pid} in actual only "
+                                f"has score {score:.6g}, not within atol={atol} of top-K boundary {act_boundary:.6g}"
+                            )
+
+                max_proposals = exp_cand.shape[1]
+                num_nodes = expected["graph_mask"].shape[1]
+                region_nodes = list(range(max_proposals, num_nodes))
+                exp_node_indices = exp_common_slots + region_nodes
+                act_node_indices = act_common_slots + region_nodes
+                exp_cols = exp_node_indices + [num_nodes]
+                act_cols = act_node_indices + [num_nodes]
+
                 for output_name, expected_tensor in expected.items():
                     actual_tensor = actual[output_name]
+                    if output_name in _PROPOSAL_INDEXED_OUTPUT_NAMES:
+                        expected_tensor = expected_tensor[:, exp_common_slots]
+                        actual_tensor = actual_tensor[:, act_common_slots]
+                    elif output_name == "graph_mask":
+                        expected_tensor = expected_tensor[:, exp_node_indices]
+                        actual_tensor = actual_tensor[:, act_node_indices]
+                    elif output_name == "graph_logits":
+                        expected_tensor = expected_tensor[:, :, exp_node_indices, :][:, :, :, exp_cols]
+                        actual_tensor = actual_tensor[:, :, act_node_indices, :][:, :, :, act_cols]
+
                     _assert_close(
                         actual_tensor,
                         expected_tensor,
