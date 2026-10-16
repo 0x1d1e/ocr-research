@@ -91,7 +91,7 @@ def _sha256(path: Path) -> str:
 
 def _make_shard_fingerprint(arguments: dict) -> dict:
     labels_path = Path(arguments["labels"])
-    return {
+    fingerprint = {
         "labels": str(labels_path),
         "labels_sha256": _sha256(labels_path) if labels_path.is_file() else None,
         "pages": arguments.get("pages"),
@@ -105,6 +105,17 @@ def _make_shard_fingerprint(arguments: dict) -> dict:
         "prefix": arguments.get("prefix"),
         "page_offset": arguments.get("page_offset"),
     }
+    exclude_hashes = arguments.get("exclude_crop_hashes")
+    if exclude_hashes:
+        unique_hashes = set(exclude_hashes)
+        fingerprint["exclude_crop_hashes_digest"] = hashlib.sha256(
+            "".join(sorted(unique_hashes)).encode("utf-8")
+        ).hexdigest()
+        fingerprint["exclude_crop_hashes_count"] = len(unique_hashes)
+    else:
+        fingerprint["exclude_crop_hashes_digest"] = None
+        fingerprint["exclude_crop_hashes_count"] = None
+    return fingerprint
 
 
 def _compose_shard(arguments: dict) -> dict:
@@ -126,6 +137,7 @@ def _compose_shard(arguments: dict) -> dict:
         blank_page_fraction=0.0,
         image_format="JPEG",
         max_characters=160,
+        exclude_crop_hashes=arguments.get("exclude_crop_hashes"),
     )
     fingerprint = _make_shard_fingerprint(arguments)
     fingerprint_path = output_dir / "shard_fingerprint.json"
@@ -183,7 +195,13 @@ def _run_shards(shards: list[dict], jobs: int) -> list[dict]:
         return [_compose_or_reuse(arguments) for arguments in shards]
 
 
-def build_split(root: Path, split: str, jobs: int, seed: int) -> dict:
+def build_split(
+    root: Path,
+    split: str,
+    jobs: int,
+    seed: int,
+    exclude_crop_hashes: set[str] | None = None,
+) -> dict:
     split_file = LABELS / f"{'val' if split == 'val' else split}.txt"
     manifests: list[Path] = []
     pools: dict[str, dict] = {}
@@ -205,6 +223,7 @@ def build_split(root: Path, split: str, jobs: int, seed: int) -> dict:
                 "seed": seed + 1000 * (pool_index + 1),
                 "prefix": prefix,
                 "page_offset": offset,
+                "exclude_crop_hashes": exclude_crop_hashes,
             }
             for offset in range(0, pages, SHARD_PAGES)
         ]
@@ -352,6 +371,26 @@ def _write_selection_subset(root: Path, manifest: Path, *, composed_per_pool: in
     return {"manifest": str(output), "manifest_sha256": _sha256(output), "pages": len(PrismPageDataset(output))}
 
 
+def _collect_crop_hashes(manifest_path: Path | str) -> set[str]:
+    """Collect all source_crop_hash values from a manifest."""
+    path = Path(manifest_path)
+    if not path.is_file():
+        return set()
+    hashes: set[str] = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            annotation = record.get("annotation") or record.get("_annotation") or {}
+            for line_record in annotation.get("lines") or []:
+                crop_hash = line_record.get("source_crop_hash")
+                if crop_hash:
+                    hashes.add(crop_hash)
+    return hashes
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default="/home/kosal/data/prismocr-corpus")
@@ -367,9 +406,31 @@ def main(argv: list[str] | None = None) -> int:
     report.setdefault("label_source", str(LABELS / "train.txt"))
     report.setdefault("seed", args.seed)
     report["splits"] = report.get("splits", {})
+
+    split_dependencies: dict[str, tuple[str, ...]] = {
+        "train": (),
+        "val": ("train",),
+        "test": ("train", "val"),
+    }
+    manifest_crop_hashes: dict[str, set[str]] = {}
+
     for split in args.splits:
+        prior_splits = split_dependencies.get(split, ())
+        exclude_hashes: set[str] = set()
+        for prior in prior_splits:
+            if prior not in manifest_crop_hashes:
+                prior_manifest = root / "splits" / f"{prior}.jsonl"
+                if prior_manifest.is_file():
+                    manifest_crop_hashes[prior] = _collect_crop_hashes(prior_manifest)
+            exclude_hashes.update(manifest_crop_hashes.get(prior, set()))
+
+        exclude = exclude_hashes if exclude_hashes else None
         print(f"building {split}", flush=True)
-        report["splits"][split] = build_split(root, split, args.jobs, args.seed)
+        report["splits"][split] = build_split(
+            root, split, args.jobs, args.seed, exclude_crop_hashes=exclude
+        )
+        split_manifest = root / "splits" / f"{split}.jsonl"
+        manifest_crop_hashes[split] = _collect_crop_hashes(split_manifest)
     if {"train", "val", "test"} <= set(args.splits):
         validation = report["splits"]["val"]["selection_subset"]["manifest"]
         report["split_report"] = write_split_report(

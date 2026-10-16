@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
@@ -116,6 +118,198 @@ class RecognitionCompositionTests(unittest.TestCase):
                     int(min(xs)) + 1 : int(max(xs)) - 1,
                 ]
                 self.assertLess(float(patch.mean()), 200.0, line["id"])
+
+    def test_compose_recognition_pages_excludes_crops(self) -> None:
+        custom_crops = self.root / "distinct_crops"
+        custom_crops.mkdir()
+        labels_lines = []
+        for i in range(4):
+            img = Image.new("RGB", (60, 10), (255, 255, 255))
+            ImageDraw.Draw(img).rectangle([4, 1, 10 + i * 10, 8], fill=(i * 40, 0, 0))
+            path = custom_crops / f"crop-{i}.png"
+            img.save(path)
+            labels_lines.append(f"{path}\tText {i}\n")
+        custom_labels = self.root / "distinct_labels.txt"
+        custom_labels.write_text("".join(labels_lines), encoding="utf-8")
+
+        base_result = compose_recognition_pages(
+            custom_labels,
+            self.root / "composed_base",
+            pages=3,
+            license_name="CC-BY-4.0",
+            permission_reference="ref",
+            reviewer="qa",
+            template_family_id="fam",
+            seed=17,
+            image_size=(256, 320),
+            columns=1,
+            lines_per_page=(3, 3),
+            blank_page_fraction=0.0,
+            rotation_degrees=0.0,
+            scale_range=(1.0, 1.0),
+            margin=8,
+            gutter=4,
+            line_padding=1,
+        )
+        dataset = PrismPageDataset(base_result["manifest"])
+        seen_hashes = {line["source_crop_hash"] for record in dataset.records for line in record["_annotation"]["lines"]}
+        self.assertGreater(len(seen_hashes), 1)
+
+        excluded_hash = next(iter(seen_hashes))
+        filtered_result = compose_recognition_pages(
+            custom_labels,
+            self.root / "composed_filtered",
+            pages=3,
+            license_name="CC-BY-4.0",
+            permission_reference="ref",
+            reviewer="qa",
+            template_family_id="fam",
+            seed=17,
+            image_size=(256, 320),
+            columns=1,
+            lines_per_page=(3, 3),
+            blank_page_fraction=0.0,
+            rotation_degrees=0.0,
+            scale_range=(1.0, 1.0),
+            margin=8,
+            gutter=4,
+            line_padding=1,
+            exclude_crop_hashes={excluded_hash},
+        )
+        filtered_dataset = PrismPageDataset(filtered_result["manifest"])
+        filtered_hashes = {
+            line["source_crop_hash"]
+            for record in filtered_dataset.records
+            for line in record["_annotation"]["lines"]
+        }
+        self.assertNotIn(excluded_hash, filtered_hashes)
+
+        with self.assertRaises(TypeError):
+            self._compose(self.root / "composed_invalid", exclude_crop_hashes="not-a-collection")
+
+        all_crops_hashes = {
+            hashlib.sha256((custom_crops / f"crop-{i}.png").read_bytes()).hexdigest()
+            for i in range(4)
+        }
+        all_excluded_result = compose_recognition_pages(
+            custom_labels,
+            self.root / "composed_empty",
+            pages=1,
+            license_name="CC-BY-4.0",
+            permission_reference="ref",
+            reviewer="qa",
+            template_family_id="fam",
+            seed=17,
+            image_size=(256, 320),
+            columns=1,
+            lines_per_page=(2, 2),
+            blank_page_fraction=0.0,
+            rotation_degrees=0.0,
+            scale_range=(1.0, 1.0),
+            margin=8,
+            gutter=4,
+            line_padding=1,
+            exclude_crop_hashes=all_crops_hashes,
+        )
+        self.assertEqual(all_excluded_result["lines"], 0)
+
+    def test_build_real_corpus_shard_fingerprint_and_crop_hash_collection(self) -> None:
+        from scripts.build_real_corpus import _collect_crop_hashes, _make_shard_fingerprint
+
+        result = self._compose(self.root / "composed_for_fp")
+        collected = _collect_crop_hashes(result["manifest"])
+        self.assertGreater(len(collected), 0)
+
+        empty_collected = _collect_crop_hashes(self.root / "nonexistent.jsonl")
+        self.assertEqual(empty_collected, set())
+
+        args_no_exclude = {"labels": str(self.labels), "pages": 3}
+        fp_no_exclude = _make_shard_fingerprint(args_no_exclude)
+        self.assertIsNone(fp_no_exclude["exclude_crop_hashes_digest"])
+        self.assertIsNone(fp_no_exclude["exclude_crop_hashes_count"])
+
+        args_exclude = {"labels": str(self.labels), "pages": 3, "exclude_crop_hashes": collected}
+        fp_exclude = _make_shard_fingerprint(args_exclude)
+        self.assertIsNotNone(fp_exclude["exclude_crop_hashes_digest"])
+        self.assertEqual(fp_exclude["exclude_crop_hashes_count"], len(collected))
+
+    def test_collect_crop_hashes_handles_none_lines_and_missing(self) -> None:
+        from scripts.build_real_corpus import _collect_crop_hashes
+
+        manifest = self.root / "test_manifest_lines_none.jsonl"
+        records = [
+            {"annotation": {"lines": None}},
+            {"_annotation": {"lines": None}},
+            {"annotation": None},
+            {"_annotation": None},
+            {},
+            {"annotation": {"lines": [{"source_crop_hash": "hash-1"}, {"source_crop_hash": None}]}},
+            {"_annotation": {"lines": [{"source_crop_hash": "hash-2"}]}},
+        ]
+        manifest.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+        collected = _collect_crop_hashes(manifest)
+        self.assertEqual(collected, {"hash-1", "hash-2"})
+
+    def test_build_real_corpus_split_hierarchy(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+        from scripts.build_real_corpus import main
+
+        corpus_root = self.root / "hierarchy_corpus"
+        splits_dir = corpus_root / "splits"
+        splits_dir.mkdir(parents=True)
+
+        call_log: list[tuple[str, set[str] | None]] = []
+
+        def fake_build_split(root, split, jobs, seed, exclude_crop_hashes=None):
+            call_log.append((split, set(exclude_crop_hashes) if exclude_crop_hashes else None))
+            split_manifest = splits_dir / f"{split}.jsonl"
+            records = [{"annotation": {"lines": [{"source_crop_hash": f"hash_{split}"}]}}]
+            split_manifest.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+            res = {"pages": 1}
+            if split == "val":
+                res["selection_subset"] = {"manifest": str(splits_dir / "val.jsonl")}
+            return res
+
+        buf = io.StringIO()
+        with redirect_stdout(buf), \
+             patch("scripts.build_real_corpus.build_split", side_effect=fake_build_split), \
+             patch("scripts.build_real_corpus.write_split_report", return_value={"page_counts": {}, "independent_group_count": 0}):
+            main(["--root", str(corpus_root), "--splits", "train", "val", "test"])
+
+        self.assertEqual(len(call_log), 3)
+        self.assertEqual(call_log[0], ("train", None))
+        self.assertEqual(call_log[1], ("val", {"hash_train"}))
+        self.assertEqual(call_log[2], ("test", {"hash_train", "hash_val"}))
+
+        # Test pre-existing prior split manifest when building val only
+        call_log.clear()
+        with redirect_stdout(buf), patch("scripts.build_real_corpus.build_split", side_effect=fake_build_split):
+            main(["--root", str(corpus_root), "--splits", "val"])
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0], ("val", {"hash_train"}))
+
+        # Test out-of-order execution (e.g., test before train): train should not depend on test
+        call_log.clear()
+        out_root = self.root / "out_of_order_corpus"
+        out_splits = out_root / "splits"
+        out_splits.mkdir(parents=True)
+
+        def fake_build_split_ooo(root, split, jobs, seed, exclude_crop_hashes=None):
+            call_log.append((split, set(exclude_crop_hashes) if exclude_crop_hashes else None))
+            split_manifest = out_splits / f"{split}.jsonl"
+            records = [{"annotation": {"lines": [{"source_crop_hash": f"hash_{split}"}]}}]
+            split_manifest.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+            return {"pages": 1}
+
+        with redirect_stdout(buf), patch("scripts.build_real_corpus.build_split", side_effect=fake_build_split_ooo):
+            main(["--root", str(out_root), "--splits", "test", "train"])
+
+        self.assertEqual(len(call_log), 2)
+        # test had no prior train or val manifests on disk
+        self.assertEqual(call_log[0], ("test", None))
+        # train never excludes anything, even if test was built first
+        self.assertEqual(call_log[1], ("train", None))
 
     def test_compose_table_pages_generates_valid_table_grid_and_relations(self) -> None:
         table_dir = self.root / "table_composed"

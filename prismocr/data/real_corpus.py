@@ -33,7 +33,7 @@ import random
 import unicodedata
 import zipfile
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +177,7 @@ def compose_recognition_pages(
     page_offset: int = 0,
     image_format: str = "PNG",
     jpeg_quality: int = 90,
+    exclude_crop_hashes: set[str] | Collection[str] | None = None,
 ) -> dict[str, Any]:
     """Compose page canvases from text-line crops and return a manifest summary."""
     if isinstance(pages, bool) or not isinstance(pages, int) or pages <= 0:
@@ -229,6 +230,12 @@ def compose_recognition_pages(
         raise ValueError("image_format must be PNG or JPEG")
     if isinstance(jpeg_quality, bool) or not isinstance(jpeg_quality, int) or not 1 <= jpeg_quality <= 100:
         raise ValueError("jpeg_quality must be an integer in [1, 100]")
+    if exclude_crop_hashes is not None:
+        if isinstance(exclude_crop_hashes, (str, bytes)):
+            raise TypeError("exclude_crop_hashes must be a collection of hashes, not a string")
+        if not isinstance(exclude_crop_hashes, Collection):
+            raise TypeError("exclude_crop_hashes must be a Collection of str")
+    exclude_set: set[str] | None = set(exclude_crop_hashes) if exclude_crop_hashes else None
     width, height = image_size
     column_width = (width - 2 * margin - (columns - 1) * gutter) / columns
     if column_width < 16:
@@ -283,6 +290,29 @@ def compose_recognition_pages(
             while remaining > 0 and attempts < 8:
                 attempts += 1
                 crop_path, text = pool[rng.randrange(len(pool))]
+                resolved_crop = Path(crop_path).resolve()
+                if exclude_set is not None:
+                    sample_attempts = 0
+                    if resolved_crop not in crop_hashes:
+                        try:
+                            crop_hashes[resolved_crop] = _sha256(resolved_crop)
+                        except OSError:
+                            unreadable += 1
+                            remaining -= 1
+                            continue
+                    while crop_hashes[resolved_crop] in exclude_set and sample_attempts < 50:
+                        sample_attempts += 1
+                        crop_path, text = pool[rng.randrange(len(pool))]
+                        resolved_crop = Path(crop_path).resolve()
+                        if resolved_crop not in crop_hashes:
+                            try:
+                                crop_hashes[resolved_crop] = _sha256(resolved_crop)
+                            except OSError:
+                                unreadable += 1
+                                break
+                    if resolved_crop not in crop_hashes or crop_hashes[resolved_crop] in exclude_set:
+                        remaining -= 1
+                        continue
                 try:
                     with Image.open(crop_path) as handle:
                         crop = handle.convert("RGB")
@@ -331,7 +361,6 @@ def compose_recognition_pages(
                 line_id = f"{page_id}:l{page_line_index:03d}"
                 page_line_index += 1
                 try:
-                    resolved_crop = Path(crop_path).resolve()
                     source_crop_id = str(resolved_crop.relative_to(labels_parent))
                 except ValueError:
                     source_crop_id = str(crop_path)
