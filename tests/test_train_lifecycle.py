@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import random
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -15,7 +17,7 @@ from PIL import Image
 from torch import nn
 
 from prismocr.data.dataset import PrismPageDataset, dataset_content_sha256
-from prismocr.train import SELECTION_POLICY, _atomic_checkpoint_save, _is_better, train
+from prismocr.train import SELECTION_POLICY, _atomic_checkpoint_save, _is_better, main, train
 
 
 class TinyTrainingModel(nn.Module):
@@ -625,6 +627,134 @@ class TrainingLifecycleTests(unittest.TestCase):
         self.assertLess(lrs[0], lrs[1])
         # Later steps decay
         self.assertGreater(lrs[1], lrs[-1])
+
+    def test_init_weights_initializes_training_from_checkpoint_and_raw_state_dict(self) -> None:
+        manifest = self._manifest("init-weights-data")
+        original_forward = TinyTrainingModel.forward
+
+        # 1. Verify initialization from file with "model_state" key (e.g. checkpoint / model.pt)
+        target_weight_checkpoint = torch.tensor(12.345)
+        checkpoint_file = self.root / "checkpoint-weights.pt"
+        torch.save({"model_state": {"weight": target_weight_checkpoint}}, checkpoint_file)
+
+        observed_weights_ckpt: list[torch.Tensor] = []
+
+        def spy_forward_ckpt(
+            model: TinyTrainingModel,
+            images: torch.Tensor,
+            targets: list[dict[str, object]],
+            *,
+            teacher_force_ratio: float,
+        ) -> dict[str, torch.Tensor]:
+            observed_weights_ckpt.append(model.weight.detach().clone())
+            return original_forward(model, images, targets, teacher_force_ratio=teacher_force_ratio)
+
+        with patch.object(TinyTrainingModel, "forward", spy_forward_ckpt):
+            self._train(manifest, self.root / "out-ckpt", epochs=1, init_weights=checkpoint_file)
+
+        self.assertGreaterEqual(len(observed_weights_ckpt), 1)
+        torch.testing.assert_close(observed_weights_ckpt[0], target_weight_checkpoint)
+
+        # 2. Verify initialization from raw model state dict
+        target_weight_raw = torch.tensor(98.765)
+        raw_file = self.root / "raw-weights.pt"
+        torch.save({"weight": target_weight_raw}, raw_file)
+
+        observed_weights_raw: list[torch.Tensor] = []
+
+        def spy_forward_raw(
+            model: TinyTrainingModel,
+            images: torch.Tensor,
+            targets: list[dict[str, object]],
+            *,
+            teacher_force_ratio: float,
+        ) -> dict[str, torch.Tensor]:
+            observed_weights_raw.append(model.weight.detach().clone())
+            return original_forward(model, images, targets, teacher_force_ratio=teacher_force_ratio)
+
+        with patch.object(TinyTrainingModel, "forward", spy_forward_raw):
+            self._train(manifest, self.root / "out-raw", epochs=1, init_weights=raw_file)
+
+        self.assertGreaterEqual(len(observed_weights_raw), 1)
+        torch.testing.assert_close(observed_weights_raw[0], target_weight_raw)
+
+        # 3. Verify CLI argument --init-weights via main()
+        observed_weights_cli: list[torch.Tensor] = []
+
+        def spy_forward_cli(
+            model: TinyTrainingModel,
+            images: torch.Tensor,
+            targets: list[dict[str, object]],
+            *,
+            teacher_force_ratio: float,
+        ) -> dict[str, torch.Tensor]:
+            observed_weights_cli.append(model.weight.detach().clone())
+            return original_forward(model, images, targets, teacher_force_ratio=teacher_force_ratio)
+
+        cli_out = self.root / "out-cli"
+        with patch.object(TinyTrainingModel, "forward", spy_forward_cli):
+            with redirect_stdout(io.StringIO()):
+                exit_code = main([
+                    "--manifest", str(manifest),
+                    "--output", str(cli_out),
+                    "--config", str(self.config),
+                    "--init-weights", str(checkpoint_file),
+                    "--epochs", "1",
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertGreaterEqual(len(observed_weights_cli), 1)
+        torch.testing.assert_close(observed_weights_cli[0], target_weight_checkpoint)
+
+        # 4. Verify that when resume_from is given, resume_from takes precedence over init_weights
+        resumed_out = self.root / "out-resume"
+        calls = 0
+
+        def fail_at_second_epoch(
+            model: TinyTrainingModel,
+            images: torch.Tensor,
+            targets: list[dict[str, object]],
+            *,
+            teacher_force_ratio: float,
+        ) -> dict[str, torch.Tensor]:
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise RuntimeError("interrupted")
+            return original_forward(model, images, targets, teacher_force_ratio=teacher_force_ratio)
+
+        with patch.object(TinyTrainingModel, "forward", fail_at_second_epoch):
+            with self.assertRaises(RuntimeError):
+                self._train(manifest, resumed_out, epochs=2)
+
+        existing_checkpoint = resumed_out / "training-state.pt"
+        saved_checkpoint = torch.load(existing_checkpoint, map_location="cpu", weights_only=True)
+        resumed_checkpoint_weight = saved_checkpoint["model_state"]["weight"]
+
+        observed_weights_resume: list[torch.Tensor] = []
+
+        def spy_forward_resume(
+            model: TinyTrainingModel,
+            images: torch.Tensor,
+            targets: list[dict[str, object]],
+            *,
+            teacher_force_ratio: float,
+        ) -> dict[str, torch.Tensor]:
+            observed_weights_resume.append(model.weight.detach().clone())
+            return original_forward(model, images, targets, teacher_force_ratio=teacher_force_ratio)
+
+        with patch.object(TinyTrainingModel, "forward", spy_forward_resume):
+            self._train(
+                manifest,
+                resumed_out,
+                epochs=2,
+                resume_from=existing_checkpoint,
+                init_weights=raw_file,
+            )
+
+        self.assertGreaterEqual(len(observed_weights_resume), 1)
+        torch.testing.assert_close(observed_weights_resume[0], resumed_checkpoint_weight)
+        self.assertFalse(torch.equal(observed_weights_resume[0], target_weight_raw))
 
 
 if __name__ == "__main__":

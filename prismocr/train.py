@@ -14,6 +14,7 @@ import os
 import random
 import tempfile
 import tomllib
+from collections.abc import Mapping
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,13 @@ import torch
 from torch.utils.data import DataLoader
 
 from prismocr.api import save_artifact
-from prismocr.data.dataset import PrismPageDataset, collate_pages, dataset_content_sha256
+from prismocr.data.dataset import (
+    AspectRatioBatchSampler,
+    PrismPageDataset,
+    collate_pages,
+    dataset_content_sha256,
+)
+from prismocr.data.sampler import validate_bucket_boundaries
 from prismocr.data.schema import resolve_line_supervision
 from prismocr.data.vocabulary import Vocabulary
 from prismocr.eval import evaluate
@@ -122,6 +129,10 @@ def _resolved_settings(
             "amp": bool(train_config.get("amp", False)),
             "amp_dtype": str(train_config.get("amp_dtype", "float16")),
             "activation_checkpointing": bool(train_config.get("activation_checkpointing", False)),
+            "bucket_batching": bool(train_config.get("bucket_batching", True)),
+            "bucket_boundaries": list(
+                validate_bucket_boundaries(train_config.get("bucket_boundaries", (0.85, 1.15)))
+            ),
             "loss_weights": {
                 str(name): float(value)
                 for name, value in sorted(train_config.get("loss_weights", {}).items())
@@ -460,6 +471,7 @@ def train(
     vocabulary_path: str | Path | None = None,
     validation_manifest: str | Path | None = None,
     resume_from: str | Path | None = None,
+    init_weights: str | Path | None = None,
 ) -> dict[str, Any]:
     config = _config(Path(config_path))
     train_config = config.get("training", {})
@@ -562,6 +574,11 @@ def train(
         strip_buckets=resolved_settings["model"]["strip_buckets"],
         fused_text_head=resolved_settings["model"]["fused_text_head"],
     ).to(selected_device)
+    if init_weights is not None and resume_from is None:
+        init_state = torch.load(Path(init_weights), map_location="cpu", weights_only=True)
+        if isinstance(init_state, Mapping) and "model_state" in init_state:
+            init_state = init_state["model_state"]
+        model.load_state_dict(init_state, strict=True)
     activation_checkpointing = bool(train_config.get("activation_checkpointing", False))
     if activation_checkpointing:
         backbone = getattr(model, "backbone", None)
@@ -574,15 +591,35 @@ def train(
         loss_weights=loss_weights,
     )
     generator = torch.Generator().manual_seed(seed)
-    data_loader = DataLoader(
-        dataset,
-        batch_size=selected_batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        collate_fn=collate_pages,
-        generator=generator,
-        pin_memory=selected_device.type == "cuda",
-    )
+    pin_memory = selected_device.type == "cuda"
+    bucket_batching = resolved_settings["training"]["bucket_batching"]
+    if bucket_batching:
+        batch_sampler = AspectRatioBatchSampler(
+            dataset,
+            batch_size=selected_batch_size,
+            boundaries=resolved_settings["training"]["bucket_boundaries"],
+            shuffle=True,
+            generator=generator,
+        )
+        data_loader = DataLoader(
+            dataset,
+            batch_sampler=batch_sampler,
+            num_workers=num_workers,
+            collate_fn=collate_pages,
+            pin_memory=pin_memory,
+            persistent_workers=(num_workers > 0),
+        )
+    else:
+        data_loader = DataLoader(
+            dataset,
+            batch_size=selected_batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            collate_fn=collate_pages,
+            generator=generator,
+            pin_memory=pin_memory,
+            persistent_workers=(num_workers > 0),
+        )
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=resolved_settings["training"]["learning_rate"],
@@ -871,6 +908,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--vocabulary", help="reuse a frozen vocab-v4.json")
     parser.add_argument("--validation-manifest", help="optional JSONL validation manifest")
     parser.add_argument("--resume", "--resume-from", dest="resume_from", help="training-state.pt checkpoint")
+    parser.add_argument("--init-weights", help="path to model weights or checkpoint to initialize from")
     args = parser.parse_args(argv)
     result = train(
         args.manifest,
@@ -882,6 +920,7 @@ def main(argv: list[str] | None = None) -> int:
         vocabulary_path=args.vocabulary,
         validation_manifest=args.validation_manifest,
         resume_from=args.resume_from,
+        init_weights=args.init_weights,
     )
     print(json.dumps(result, indent=2))
     return 0
