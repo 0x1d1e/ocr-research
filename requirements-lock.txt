@@ -1,6 +1,6 @@
 # Pinned dependencies for PyTorch 2.4+ / Python 3.11+
 torch==2.4.1
 numpy==1.26.4
-Pillow==10.4.0
+Pillow==13.0.0
 onnx==1.17.0
 onnxruntime==1.19.2
